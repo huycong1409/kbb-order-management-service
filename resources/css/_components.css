@@ -1,0 +1,107 @@
+/* ─── Cards ──────────────────────────────────────────────────────────────── */
+.card {
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    transition: box-shadow .2s, transform .2s;
+}
+.card:hover {
+    box-shadow: 0 4px 20px rgba(0,0,0,.09);
+    transform: translateY(-1px);
+}
+.card-header {
+    background: var(--color-white);
+    border-bottom: 1px solid var(--color-border);
+    padding: .875rem 1.25rem;
+}
+
+/* ─── Tables ─────────────────────────────────────────────────────────────── */
+.table th {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--color-text-muted);
+    background: #f8fafc;
+    border-bottom: 2px solid var(--color-border);
+}
+.table td {
+    vertical-align: middle;
+    color: var(--color-text);
+}
+.table tbody tr {
+    transition: background .15s;
+}
+
+/* ─── Stat cards ─────────────────────────────────────────────────────────── */
+.stat-card {
+    border-radius: 10px;
+    padding: 1.25rem;
+    color: #fff;
+    transition: transform .2s, box-shadow .2s;
+}
+.stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0,0,0,.18);
+}
+.stat-card .label {
+    font-size: 0.7rem;
+    opacity: .8;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+.stat-card .value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-top: .25rem;
+    transition: opacity .3s;
+}
+
+/* ─── Alerts ─────────────────────────────────────────────────────────────── */
+.alert {
+    animation: alertSlide .25s ease both;
+}
+
+/* ─── Buttons ────────────────────────────────────────────────────────────── */
+.btn {
+    transition: transform .12s, box-shadow .12s;
+}
+.btn:active {
+    transform: scale(.96);
+}
+.btn-loading {
+    pointer-events: none;
+    opacity: .75;
+}
+.btn-loading::before {
+    content: '';
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    margin-right: 6px;
+    animation: spin .6s linear infinite;
+    vertical-align: middle;
+}
+
+/* ─── Utilities ──────────────────────────────────────────────────────────── */
+.num {
+    font-family: var(--font-mono);
+    text-align: right;
+}
+.num-positive { color: var(--color-success); font-weight: 600; }
+.num-negative { color: var(--color-danger);  font-weight: 600; }
+
+.badge-platform {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+}
+.input-ads { width: 140px; font-size: 0.8rem; }
+.saving     { opacity: .6; font-size: 0.75rem; }
+
+/* Order group rows */
+.order-group-start td { border-top: 2px solid #3b82f6 !important; background: #eff6ff !important; }
+.order-group-row   td { background: #f8fafc; }
+.order-group-total td { background: #f0fdf4; border-bottom: 2px solid #86efac; font-weight: 600; }

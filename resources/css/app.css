@@ -1,0 +1,7 @@
+/* KBB Order Management — compiled stylesheet
+   Import order matters: variables → layout → components → animations
+   ------------------------------------------------------------------ */
+@import './_variables.css';
+@import './_layout.css';
+@import './_components.css';
+@import './_animations.css';

@@ -1,0 +1,28 @@
+/* ─── Design tokens ──────────────────────────────────────────────────────── */
+:root {
+    /* Colors */
+    --color-bg:           #f5f6fa;
+    --color-sidebar-bg:   #1e293b;
+    --color-sidebar-border: #334155;
+    --color-border:       #e2e8f0;
+    --color-text:         #374151;
+    --color-text-muted:   #64748b;
+    --color-white:        #ffffff;
+
+    /* Brand */
+    --color-primary:      #0ea5e9;
+    --color-primary-dark: #0284c7;
+    --color-accent:       #38bdf8;
+
+    /* Semantic */
+    --color-success:      #059669;
+    --color-danger:       #dc2626;
+    --color-warning:      #f59e0b;
+
+    /* Sidebar */
+    --sidebar-width:      240px;
+
+    /* Typography */
+    --font-base-size:     0.875rem;
+    --font-mono:          'Courier New', monospace;
+}
