@@ -56,6 +56,12 @@ class OrderRepository implements OrderRepositoryInterface
             });
         }
 
+        if (!empty($filters['product_name'])) {
+            $query->whereHas('items', function ($q) use ($filters) {
+                $q->where('product_name', 'like', "%{$filters['product_name']}%");
+            });
+        }
+
         if (!empty($filters['date_from'])) {
             $query->whereDate('order_date', '>=', $filters['date_from']);
         }
@@ -113,6 +119,28 @@ class OrderRepository implements OrderRepositoryInterface
         });
     }
 
+    /**
+     * Xoá tất cả đơn hàng của shop trong 1 tháng cụ thể.
+     * Dùng trước khi import để ghi đè dữ liệu tháng đó.
+     * Trả về số đơn đã xoá.
+     */
+    public function deleteForShopInMonth(int $shopId, int $year, int $month): int
+    {
+        $orders = Order::where('shop_id', $shopId)
+            ->whereYear('order_date', $year)
+            ->whereMonth('order_date', $month)
+            ->get();
+
+        $count = $orders->count();
+
+        foreach ($orders as $order) {
+            $order->items()->delete();
+            $order->delete();
+        }
+
+        return $count;
+    }
+
     public function getForExport(array $filters = []): Collection
     {
         $query = Order::with(['shop', 'items']);
@@ -125,6 +153,9 @@ class OrderRepository implements OrderRepositoryInterface
                 $q->where('order_code', 'like', "%{$filters['search']}%")
                   ->orWhereHas('items', fn ($q2) => $q2->where('product_name', 'like', "%{$filters['search']}%"));
             });
+        }
+        if (!empty($filters['product_name'])) {
+            $query->whereHas('items', fn ($q) => $q->where('product_name', 'like', "%{$filters['product_name']}%"));
         }
         if (!empty($filters['date_from'])) {
             $query->whereDate('order_date', '>=', $filters['date_from']);
@@ -171,5 +202,24 @@ class OrderRepository implements OrderRepositoryInterface
             ->get();
 
         return $orders->sum(fn ($order) => $order->profit);
+    }
+
+    /**
+     * Trả về tóm tắt tháng: số đơn, doanh thu, lợi nhuận trước ADS.
+     */
+    public function getMonthSummaryStats(int $shopId, int $year, int $month): array
+    {
+        $orders = Order::with('items')
+            ->forShop($shopId)
+            ->whereYear('order_date', $year)
+            ->whereMonth('order_date', $month)
+            ->get();
+
+        return [
+            'order_count'   => $orders->count(),
+            'total_selling' => (float) $orders->flatMap->items->sum('selling_price'),
+            'total_cost'    => (float) $orders->sum(fn ($o) => $o->total_cost),
+            'profit'        => (float) $orders->sum(fn ($o) => $o->profit),
+        ];
     }
 }

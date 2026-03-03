@@ -59,36 +59,57 @@
     $totalDailyProfit     = $report['total_daily_profit'];
     $monthlyProfit        = $report['monthly_profit'];
     $kolCost              = $report['kol_cost'];
+
+    // Helper tính % thay đổi và trả về HTML badge
+    $cmpBadge = function(?float $curr, ?float $prev, int $prevM, int $prevY): string {
+        $label = "T{$prevM}/{$prevY}";
+        if ($prev === null || $prev == 0) {
+            return "<span class=\"flat\">— so với {$label}</span>";
+        }
+        $pct = round(($curr - $prev) / abs($prev) * 100, 1);
+        if ($pct > 0) {
+            return "<span class=\"up\">▲" . number_format($pct, 1) . "%</span><span class=\"flat\"> so với {$label}</span>";
+        }
+        if ($pct < 0) {
+            return "<span class=\"down\">▼" . number_format(abs($pct), 1) . "%</span><span class=\"flat\"> so với {$label}</span>";
+        }
+        return "<span class=\"flat\">= 0% so với {$label}</span>";
+    };
 @endphp
 <div class="row g-2 mb-3">
     <div class="col-auto">
-        <div class="stat-card" style="background:#8b5cf6">
-            <div class="label">LN trước ADS</div>
-            <div class="value">{{ number_format($totalProfitBeforeAds) }}₫</div>
+        <div class="stat-card" style="background:#3b82f6">
+            <div class="label">Doanh số</div>
+            <div class="value">{{ number_format($currStats['total_selling']) }}₫</div>
+            <div class="compare">{!! $cmpBadge($currStats['total_selling'], $prevStats['total_selling'], $prevMonth, $prevYear) !!}</div>
+        </div>
+    </div>
+    <div class="col-auto">
+        <div class="stat-card" style="background:#7c3aed">
+            <div class="label">Vốn</div>
+            <div class="value">{{ number_format($currStats['total_cost']) }}₫</div>
+            <div class="compare">{!! $cmpBadge($currStats['total_cost'], $prevStats['total_cost'], $prevMonth, $prevYear) !!}</div>
         </div>
     </div>
     <div class="col-auto">
         <div class="stat-card" style="background:#f59e0b">
-            <div class="label">Tổng chi phí ADS</div>
+            <div class="label">ADS</div>
             <div class="value">{{ number_format($totalAdsCost) }}₫</div>
-        </div>
-    </div>
-    <div class="col-auto">
-        <div class="stat-card" style="background:#06b6d4">
-            <div class="label">LN sau ADS</div>
-            <div class="value">{{ number_format($totalDailyProfit) }}₫</div>
+            <div class="compare">{!! $cmpBadge($currStats['total_ads_cost'], $prevStats['total_ads_cost'], $prevMonth, $prevYear) !!}</div>
         </div>
     </div>
     <div class="col-auto">
         <div class="stat-card" style="background:#ef4444">
-            <div class="label">Chi phí KOL</div>
+            <div class="label">KOL</div>
             <div class="value">{{ number_format($kolCost) }}₫</div>
+            <div class="compare">{!! $cmpBadge($currStats['kol_cost'], $prevStats['kol_cost'], $prevMonth, $prevYear) !!}</div>
         </div>
     </div>
     <div class="col-auto">
         <div class="stat-card" style="background:{{ $monthlyProfit >= 0 ? '#059669' : '#dc2626' }}">
-            <div class="label">LN Tháng</div>
+            <div class="label">Lợi Nhuận</div>
             <div class="value">{{ number_format($monthlyProfit) }}₫</div>
+            <div class="compare">{!! $cmpBadge($currStats['monthly_profit'], $prevStats['monthly_profit'], $prevMonth, $prevYear) !!}</div>
         </div>
     </div>
 </div>

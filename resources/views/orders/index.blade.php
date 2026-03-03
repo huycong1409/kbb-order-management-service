@@ -5,12 +5,13 @@
 @push('styles')
 <style>
 .orders-table { table-layout: auto; }
-.orders-table th, .orders-table td { white-space: nowrap; font-size: 0.78rem; padding: .35rem .55rem; }
+.orders-table th { white-space: nowrap; font-size: 0.75rem; padding: .35rem .55rem; }
+.orders-table td { white-space: nowrap; font-size: 0.82rem; padding: .35rem .55rem; }
 .order-first-row > td { background: #eff6ff !important; border-top: 2px solid #93c5fd !important; }
 .order-sub-row > td { background: #f8fafc; }
 .order-total-row > td { background: #f0fdf4; border-bottom: 2px solid #86efac; }
-.order-total-row td { font-weight: 600; font-size: 0.75rem; }
-.col-money { text-align: right; font-family: 'Courier New', monospace; }
+.order-total-row td { font-weight: 600; font-size: 0.82rem; }
+.col-money { text-align: right; font-family: 'Courier New', monospace; font-size: 0.875rem; }
 .profit-positive { color: #059669; font-weight: 700; }
 .profit-negative { color: #dc2626; font-weight: 700; }
 .order-loss-first > td { background: #fff1f2 !important; border-top: 2px solid #fca5a5 !important; }
@@ -37,7 +38,14 @@ tr:hover .btn-copy { opacity: 1; }
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
         <h5 class="mb-0 fw-bold">Danh sách Đơn hàng</h5>
-        <small class="text-muted">{{ $orders->total() }} đơn hàng</small>
+        <small class="text-muted">
+            {{ $orders->total() }} đơn hàng
+            @if(request('product_name'))
+                &nbsp;<span class="badge bg-primary-subtle text-primary" style="font-size:.7rem">
+                    <i class="bi bi-funnel-fill me-1"></i>SP: "{{ request('product_name') }}"
+                </span>
+            @endif
+        </small>
     </div>
     <div class="d-flex gap-2">
         <a href="{{ route('orders.export', request()->query()) }}" class="btn btn-outline-success btn-sm">
@@ -75,9 +83,14 @@ tr:hover .btn-copy { opacity: 1; }
                        value="{{ request('date_to') }}" style="width:145px">
             </div>
             <div>
+                <label class="form-label mb-1 fw-semibold" style="font-size:.75rem">Tên sản phẩm</label>
+                <input type="text" name="product_name" class="form-control form-control-sm"
+                       value="{{ request('product_name') }}" placeholder="VD: lót ly, khay..." style="width:200px">
+            </div>
+            <div>
                 <label class="form-label mb-1 fw-semibold" style="font-size:.75rem">Tìm kiếm</label>
                 <input type="text" name="search" class="form-control form-control-sm"
-                       value="{{ request('search') }}" placeholder="Mã đơn, tên SP..." style="width:220px">
+                       value="{{ request('search') }}" placeholder="Mã đơn, tên SP..." style="width:180px">
             </div>
             <div class="align-self-end">
                 <div class="form-check form-switch mb-0" style="padding-top:.3rem">
@@ -92,7 +105,7 @@ tr:hover .btn-copy { opacity: 1; }
                 <button type="submit" class="btn btn-sm btn-primary">
                     <i class="bi bi-search"></i> Lọc
                 </button>
-                @if(request()->hasAny(['shop_id','date_from','date_to','search','product_id','loss_only']))
+                @if(request()->hasAny(['shop_id','date_from','date_to','search','product_id','product_name','loss_only']))
                     <a href="{{ route('orders.index') }}" class="btn btn-sm btn-outline-secondary">
                         <i class="bi bi-x"></i>
                     </a>
@@ -304,60 +317,65 @@ tr:hover .btn-copy { opacity: 1; }
         </div>
     </div>
 </div>
-{{-- Modal xem nhanh đơn hàng --}}
-<div class="modal fade" id="previewModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header py-2" style="background:#1e293b">
-                <h6 class="modal-title text-white mb-0">
-                    <i class="bi bi-receipt me-1"></i>
-                    <span id="pm-code">—</span>
-                    <span class="badge bg-secondary ms-2" id="pm-shop" style="font-size:.65rem"></span>
-                </h6>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+{{-- Overlay + Drawer xem nhanh đơn hàng --}}
+<div id="drawerOverlay" onclick="closeDrawer()"
+     style="display:none; position:fixed; inset:0; z-index:1040; background:rgba(0,0,0,.35)"></div>
+
+<div id="orderDrawer"
+     style="position:fixed; top:0; right:-520px; width:520px; max-width:100vw; height:100vh;
+            z-index:1050; background:#fff; box-shadow:-4px 0 24px rgba(0,0,0,.18);
+            transition:right .22s ease; display:flex; flex-direction:column; overflow:hidden">
+    {{-- Header --}}
+    <div class="d-flex align-items-center justify-content-between px-3 py-2" style="background:#1e293b; flex-shrink:0">
+        <h6 class="mb-0 text-white">
+            <i class="bi bi-receipt me-1"></i>
+            <span id="pm-code">—</span>
+            <span class="badge bg-secondary ms-2" id="pm-shop" style="font-size:.65rem"></span>
+        </h6>
+        <button onclick="closeDrawer()" class="btn-close btn-close-white" style="font-size:.75rem"></button>
+    </div>
+    {{-- Body --}}
+    <div style="flex:1; overflow-y:auto">
+        <div id="pm-loading" class="text-center py-5">
+            <div class="spinner-border spinner-border-sm text-primary"></div>
+        </div>
+        <div id="pm-content" style="display:none">
+            <div class="px-3 pt-3 pb-2 d-flex flex-wrap gap-3" style="font-size:.8rem; background:#f8fafc; border-bottom:1px solid #e2e8f0">
+                <span><i class="bi bi-calendar3 text-muted me-1"></i><span id="pm-date"></span></span>
+                <span><i class="bi bi-person text-muted me-1"></i><span id="pm-buyer"></span></span>
+                <span><i class="bi bi-geo-alt text-muted me-1"></i><span id="pm-province"></span></span>
             </div>
-            <div class="modal-body p-0">
-                <div id="pm-loading" class="text-center py-5">
-                    <div class="spinner-border spinner-border-sm text-primary"></div>
-                </div>
-                <div id="pm-content" style="display:none">
-                    <div class="px-3 pt-3 pb-2 d-flex flex-wrap gap-3" style="font-size:.8rem; background:#f8fafc; border-bottom:1px solid #e2e8f0">
-                        <span><i class="bi bi-calendar3 text-muted me-1"></i><span id="pm-date"></span></span>
-                        <span><i class="bi bi-person text-muted me-1"></i><span id="pm-buyer"></span></span>
-                        <span><i class="bi bi-geo-alt text-muted me-1"></i><span id="pm-province"></span></span>
-                    </div>
-                    <div class="table-responsive">
-                        <table class="table table-sm mb-0" style="font-size:.78rem">
-                            <thead>
-                                <tr style="background:#f8fafc">
-                                    <th>Sản phẩm</th><th>Phân loại</th>
-                                    <th class="text-end">SL</th>
-                                    <th class="text-end">Giá vốn</th>
-                                    <th class="text-end">Giá bán</th>
-                                    <th class="text-end">Thuế</th>
-                                </tr>
-                            </thead>
-                            <tbody id="pm-items"></tbody>
-                        </table>
-                    </div>
-                    <div class="px-3 py-2 d-flex flex-wrap gap-3 justify-content-end" style="font-size:.78rem; border-top:1px solid #e2e8f0; background:#f8fafc">
-                        <span class="text-muted">Phí CĐ: <strong id="pm-fixed"></strong></span>
-                        <span class="text-muted">Phí DV: <strong id="pm-service"></strong></span>
-                        <span class="text-muted">Phí TT: <strong id="pm-payment"></strong></span>
-                        <span class="text-muted">Pi Ship: <strong id="pm-piship"></strong></span>
-                        <span class="text-muted">Tổng giá bán: <strong id="pm-selling"></strong></span>
-                        <span class="text-muted">Tổng vốn: <strong id="pm-cost"></strong></span>
-                        <span class="fw-bold" id="pm-profit-wrap">LN: <strong id="pm-profit"></strong></span>
-                    </div>
-                </div>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0" style="font-size:.78rem">
+                    <thead>
+                        <tr style="background:#f8fafc">
+                            <th>Sản phẩm</th><th>Phân loại</th>
+                            <th class="text-end">SL</th>
+                            <th class="text-end">Giá vốn</th>
+                            <th class="text-end">Giá bán</th>
+                            <th class="text-end">Thuế</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pm-items"></tbody>
+                </table>
             </div>
-            <div class="modal-footer py-2">
-                <a id="pm-detail-link" href="#" class="btn btn-sm btn-primary">
-                    <i class="bi bi-arrow-right-circle"></i> Xem chi tiết
-                </a>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+            <div class="px-3 py-2 d-flex flex-wrap gap-3 justify-content-end" style="font-size:.78rem; border-top:1px solid #e2e8f0; background:#f8fafc">
+                <span class="text-muted">Phí CĐ: <strong id="pm-fixed"></strong></span>
+                <span class="text-muted">Phí DV: <strong id="pm-service"></strong></span>
+                <span class="text-muted">Phí TT: <strong id="pm-payment"></strong></span>
+                <span class="text-muted">Pi Ship: <strong id="pm-piship"></strong></span>
+                <span class="text-muted">Tổng giá bán: <strong id="pm-selling"></strong></span>
+                <span class="text-muted">Tổng vốn: <strong id="pm-cost"></strong></span>
+                <span class="fw-bold">LN: <strong id="pm-profit"></strong></span>
             </div>
         </div>
+    </div>
+    {{-- Footer --}}
+    <div class="d-flex gap-2 justify-content-end px-3 py-2" style="border-top:1px solid #e2e8f0; flex-shrink:0">
+        <a id="pm-detail-link" href="#" class="btn btn-sm btn-primary">
+            <i class="bi bi-arrow-right-circle"></i> Xem chi tiết
+        </a>
+        <button onclick="closeDrawer()" class="btn btn-sm btn-outline-secondary">Đóng</button>
     </div>
 </div>
 
@@ -375,19 +393,24 @@ function copyCode(code, btn) {
     });
 }
 
-// ── Modal xem nhanh ──────────────────────────────────────────
-const previewModal = new bootstrap.Modal(document.getElementById('previewModal'));
-
+// ── Drawer xem nhanh đơn hàng ──────────────────────────────
 function fmt(n) {
     if (n === '' || n === null || n === undefined) return '—';
     return Math.round(Number(n)).toLocaleString('vi-VN');
 }
 
+function closeDrawer() {
+    document.getElementById('orderDrawer').style.right = '-520px';
+    document.getElementById('drawerOverlay').style.display = 'none';
+}
+
 function openPreview(id, detailUrl) {
     document.getElementById('pm-loading').style.display = '';
-    document.getElementById('pm-content').style.display  = 'none';
+    document.getElementById('pm-content').style.display = 'none';
     document.getElementById('pm-detail-link').href = detailUrl;
-    previewModal.show();
+
+    document.getElementById('drawerOverlay').style.display = '';
+    document.getElementById('orderDrawer').style.right = '0';
 
     fetch(`/orders/${id}/preview`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(r => r.json())
@@ -420,9 +443,12 @@ function openPreview(id, detailUrl) {
             `).join('');
 
             document.getElementById('pm-loading').style.display = 'none';
-            document.getElementById('pm-content').style.display  = '';
+            document.getElementById('pm-content').style.display = '';
         });
 }
+
+// Đóng drawer khi nhấn ESC
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
 </script>
 @endpush
 @endsection

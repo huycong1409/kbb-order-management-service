@@ -26,7 +26,7 @@ class OrderController extends Controller
      */
     public function index(Request $request): View
     {
-        $filters = $request->only('shop_id', 'search', 'product_id', 'date_from', 'date_to', 'status', 'loss_only', 'sort', 'dir');
+        $filters = $request->only('shop_id', 'search', 'product_id', 'product_name', 'date_from', 'date_to', 'status', 'loss_only', 'sort', 'dir');
         $perPage = (int) $request->input('per_page', 20);
         $perPage = in_array($perPage, [10, 20, 50, 100, 200]) ? $perPage : 20;
         $orders  = $this->orderService->list($filters, $perPage);
@@ -37,7 +37,7 @@ class OrderController extends Controller
 
     public function export(Request $request): BinaryFileResponse
     {
-        $filters  = $request->only('shop_id', 'search', 'product_id', 'date_from', 'date_to', 'loss_only');
+        $filters  = $request->only('shop_id', 'search', 'product_id', 'product_name', 'date_from', 'date_to', 'loss_only');
         $orders   = $this->orderService->getForExport($filters);
         $filename = 'don-hang-' . now()->format('Ymd-His') . '.xlsx';
 
@@ -100,10 +100,20 @@ class OrderController extends Controller
             (int) $request->input('shop_id')
         );
 
-        $message = "Import hoàn tất: {$stats['imported']} đơn thành công";
+        // Nếu phát hiện cột bị thay đổi → chặn import, yêu cầu kiểm tra file
+        if (!empty($stats['column_warnings'])) {
+            return redirect()->route('orders.import-form')
+                ->with('warning', 'File có thể không đúng định dạng Shopee hoặc Shopee đã thay đổi cấu trúc cột. Dữ liệu CHƯA được import.')
+                ->with('import_errors', $stats['column_warnings']);
+        }
 
+        $message = "Import hoàn tất: {$stats['imported']} đơn";
+
+        if (!empty($stats['deleted'])) {
+            $message .= " ({$stats['deleted']} đơn cũ đã được xoá và thay thế)";
+        }
         if ($stats['skipped'] > 0) {
-            $message .= ", {$stats['skipped']} bỏ qua";
+            $message .= ", {$stats['skipped']} bỏ qua (đơn hủy)";
         }
 
         if (!empty($stats['errors'])) {

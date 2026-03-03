@@ -137,7 +137,7 @@ input.addEventListener('change', function () {
     }
 });
 
-dropZone.addEventListener('click', () => input.click());
+dropZone.addEventListener('click', (e) => { if (e.target.closest('label')) return; input.click(); });
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = '#3b82f6'; });
 dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = '#cbd5e1'; });
 dropZone.addEventListener('drop', e => {

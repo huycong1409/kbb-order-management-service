@@ -12,7 +12,9 @@ interface OrderRepositoryInterface
     public function find(int $id): Order;
     public function findByCode(int $shopId, string $orderCode): ?Order;
     public function createOrUpdate(array $orderData, array $items): Order;
+    public function deleteForShopInMonth(int $shopId, int $year, int $month): int;
     public function getProfitByDate(int $shopId, string $date): float;
     public function getProfitByMonth(int $shopId, int $year, int $month): float;
+    public function getMonthSummaryStats(int $shopId, int $year, int $month): array;
     public function getForExport(array $filters = []): Collection;
 }

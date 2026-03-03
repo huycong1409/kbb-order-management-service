@@ -67,6 +67,33 @@ class ReportService
     }
 
     /**
+     * Tóm tắt nhanh 1 tháng (dùng để so sánh với tháng trước).
+     * Trả về: order_count, total_selling, profit_before_ads,
+     *         total_ads_cost, daily_profit_total, kol_cost, monthly_profit.
+     */
+    public function getMonthStats(int $shopId, int $year, int $month): array
+    {
+        $orderStats   = $this->orderRepository->getMonthSummaryStats($shopId, $year, $month);
+        $dailyReports = $this->reportRepository->getDailyReportsForMonth($shopId, $year, $month);
+        $kolCost      = $this->reportRepository->getMonthlyKolCost($shopId, $year, $month);
+
+        $totalAdsCost   = (float) $dailyReports->sum(fn ($r) => max(0, $r->ads_fee - $r->ads_refund));
+        $kolCostValue   = (float) ($kolCost?->kol_cost ?? 0);
+        $dailyProfitTotal = $orderStats['profit'] - $totalAdsCost;
+
+        return [
+            'order_count'        => $orderStats['order_count'],
+            'total_selling'      => $orderStats['total_selling'],
+            'total_cost'         => $orderStats['total_cost'],
+            'profit_before_ads'  => $orderStats['profit'],
+            'total_ads_cost'     => $totalAdsCost,
+            'daily_profit_total' => $dailyProfitTotal,
+            'kol_cost'           => $kolCostValue,
+            'monthly_profit'     => $dailyProfitTotal - $kolCostValue,
+        ];
+    }
+
+    /**
      * Cập nhật thông tin ADS cho 1 ngày.
      */
     public function updateDailyAds(int $shopId, string $date, array $data): DailyReport

@@ -27,10 +27,16 @@ class ReportController extends Controller
         $year   = (int) $request->input('year', now()->year);
         $month  = (int) $request->input('month', now()->month);
 
-        $report = $this->reportService->getMonthlyReport($shopId, $year, $month);
-        $shops  = $this->shopService->allActive();
+        $report    = $this->reportService->getMonthlyReport($shopId, $year, $month);
+        $shops     = $this->shopService->allActive();
+        $currStats = $this->reportService->getMonthStats($shopId, $year, $month);
 
-        return view('reports.monthly', compact('report', 'shops', 'shopId', 'year', 'month'));
+        // Tháng trước để so sánh
+        $prevYear  = $month === 1 ? $year - 1 : $year;
+        $prevMonth = $month === 1 ? 12 : $month - 1;
+        $prevStats = $this->reportService->getMonthStats($shopId, $prevYear, $prevMonth);
+
+        return view('reports.monthly', compact('report', 'shops', 'shopId', 'year', 'month', 'currStats', 'prevStats', 'prevMonth', 'prevYear'));
     }
 
     /**
