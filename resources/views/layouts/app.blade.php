@@ -27,11 +27,21 @@
         <a href="{{ route('shops.index') }}" class="nav-link {{ request()->routeIs('shops.*') ? 'active' : '' }}">
             <i class="bi bi-shop"></i> Quản lý Shop
         </a>
+        <a href="{{ route('products.all') }}" class="nav-link {{ request()->routeIs('products.*') ? 'active' : '' }}">
+            <i class="bi bi-box-seam"></i> Sản phẩm
+        </a>
         <a href="{{ route('orders.index') }}" class="nav-link {{ request()->routeIs('orders.*') ? 'active' : '' }}">
             <i class="bi bi-receipt"></i> Đơn hàng
         </a>
-        <a href="{{ route('reports.monthly') }}" class="nav-link {{ request()->routeIs('reports.*') ? 'active' : '' }}">
-            <i class="bi bi-bar-chart-line"></i> Báo cáo
+        <div class="nav-section mt-2">Báo cáo</div>
+        <a href="{{ route('reports.monthly') }}" class="nav-link {{ request()->routeIs('reports.monthly') ? 'active' : '' }}">
+            <i class="bi bi-bar-chart-line"></i> Báo cáo doanh số
+        </a>
+        <a href="{{ route('reports.compare') }}" class="nav-link {{ request()->routeIs('reports.compare') ? 'active' : '' }}">
+            <i class="bi bi-arrow-left-right"></i> So sánh chỉ số
+        </a>
+        <a href="{{ route('reports.ads') }}" class="nav-link {{ request()->routeIs('reports.ads') ? 'active' : '' }}">
+            <i class="bi bi-megaphone"></i> Chi phí ADS/KOL
         </a>
 
         <div class="nav-section mt-2">Import</div>
@@ -46,16 +56,16 @@
     </div>
 
     {{-- User info + logout ở cuối sidebar --}}
-    <div class="mt-auto" style="border-top:1px solid #2d3f55; padding: .875rem .75rem">
+    <div class="mt-auto" style="border-top:1px solid #e2e8f0; padding: .875rem .75rem">
         <div class="d-flex align-items-center gap-2 px-1 mb-2">
-            <div style="width:34px;height:34px;border-radius:50%;background:#38bdf8;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-                <i class="bi bi-person-fill" style="font-size:.95rem;color:#0f172a"></i>
+            <div style="width:34px;height:34px;border-radius:50%;background:#0ea5e9;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                <i class="bi bi-person-fill" style="font-size:.95rem;color:#fff"></i>
             </div>
             <div style="min-width:0">
-                <div style="font-size:.8rem;font-weight:700;color:#f1f5f9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                <div style="font-size:.8rem;font-weight:700;color:#1e293b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
                     {{ Auth::user()->name }}
                 </div>
-                <div style="font-size:.7rem;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                <div style="font-size:.7rem;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
                     {{ Auth::user()->email }}
                 </div>
             </div>
@@ -63,7 +73,7 @@
         <form action="{{ route('logout') }}" method="POST">
             @csrf
             <button type="submit" class="nav-link w-100 text-start border-0 bg-transparent"
-                    style="color:#f87171;font-size:.8rem;font-weight:500">
+                    style="color:#dc2626;font-size:0.875rem;font-weight:500">
                 <i class="bi bi-box-arrow-right"></i> Đăng xuất
             </button>
         </form>

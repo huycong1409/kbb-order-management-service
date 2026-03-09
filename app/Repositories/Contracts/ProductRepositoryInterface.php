@@ -10,9 +10,11 @@ interface ProductRepositoryInterface
 {
     public function allForShop(int $shopId): Collection;
     public function paginateForShop(int $shopId, int $perPage = 15, array $filters = []): LengthAwarePaginator;
+    public function paginateAll(int $perPage = 20, array $filters = []): LengthAwarePaginator;
     public function find(int $id): Product;
     public function findByNameAndShop(string $name, int $shopId): ?Product;
     public function create(array $data): Product;
     public function update(Product $product, array $data): Product;
     public function delete(Product $product): void;
+    public function reorder(array $positions): void;
 }

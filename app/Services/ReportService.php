@@ -114,6 +114,74 @@ class ReportService
     }
 
     /**
+     * Báo cáo hiệu suất sản phẩm theo khoảng ngày + danh sách sản phẩm tùy chọn.
+     * Trả về: total_revenue, total_cost, total_profit, total_qty, products (Collection).
+     */
+    public function getProductReport(int $shopId, string $dateFrom, string $dateTo, array $productIds = []): array
+    {
+        $stats = $this->orderRepository->getProductStats([
+            'shop_id'     => $shopId,
+            'date_from'   => $dateFrom,
+            'date_to'     => $dateTo,
+            'product_ids' => $productIds,
+        ]);
+
+        return [
+            'total_revenue' => (float) $stats->sum('total_revenue'),
+            'total_cost'    => (float) $stats->sum('total_cost'),
+            'total_profit'  => (float) $stats->sum('total_profit'),
+            'total_qty'     => (int) $stats->sum('total_qty'),
+            'products'      => $stats,
+        ];
+    }
+
+    /**
+     * So sánh chỉ số sản phẩm giữa nhiều shop trong khoảng ngày.
+     * Trả về mảng indexed theo product_id (hoặc hash tên):
+     *   [ pid => ['product_name' => ..., 'shops' => [shop_id => stats]] ]
+     * Sắp xếp giảm dần theo tổng doanh số.
+     */
+    public function getCompareData(array $shopIds, string $dateFrom, string $dateTo, array $productIds = []): array
+    {
+        if (empty($shopIds)) {
+            return [];
+        }
+
+        $rows = $this->orderRepository->getProductStats([
+            'shop_ids'    => $shopIds,
+            'date_from'   => $dateFrom,
+            'date_to'     => $dateTo,
+            'product_ids' => $productIds,
+        ]);
+
+        $byProduct = [];
+        foreach ($rows as $row) {
+            $pid = $row->product_id ?? 'n_' . md5($row->product_name);
+            if (!isset($byProduct[$pid])) {
+                $byProduct[$pid] = [
+                    'product_id'   => $row->product_id,
+                    'product_name' => $row->product_name,
+                    'shops'        => [],
+                ];
+            }
+            $byProduct[$pid]['shops'][$row->shop_id] = [
+                'total_qty'     => (int) $row->total_qty,
+                'total_revenue' => (float) $row->total_revenue,
+                'total_cost'    => (float) $row->total_cost,
+                'total_profit'  => (float) $row->total_profit,
+            ];
+        }
+
+        uasort($byProduct, function ($a, $b) {
+            $sumA = array_sum(array_column($a['shops'], 'total_revenue'));
+            $sumB = array_sum(array_column($b['shops'], 'total_revenue'));
+            return $sumB <=> $sumA;
+        });
+
+        return $byProduct;
+    }
+
+    /**
      * Cập nhật chi phí KOL theo tháng.
      */
     public function updateMonthlyKolCost(int $shopId, int $year, int $month, float $kolCost): void

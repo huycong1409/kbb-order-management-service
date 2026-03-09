@@ -4,7 +4,7 @@
 
 @section('content')
 <div class="d-flex align-items-center gap-2 mb-3">
-    <a href="{{ route('shops.products.index', $shop->id) }}" class="btn btn-sm btn-outline-secondary">
+    <a href="{{ request('_back') === 'products.all' ? route('products.all', ['shop_id' => $shop->id]) : route('shops.products.index', $shop->id) }}" class="btn btn-sm btn-outline-secondary">
         <i class="bi bi-arrow-left"></i>
     </a>
     <h5 class="mb-0 fw-bold">Thêm Sản phẩm mới</h5>
@@ -13,6 +13,7 @@
 
 <form action="{{ route('shops.products.store', $shop->id) }}" method="POST">
     @csrf
+    <input type="hidden" name="_back" value="{{ request('_back', '') }}">
     <div class="row g-3">
         <div class="col-lg-7">
             <div class="card mb-3">
@@ -62,7 +63,7 @@
                         <button type="submit" class="btn btn-primary">
                             <i class="bi bi-check-lg"></i> Lưu Sản phẩm
                         </button>
-                        <a href="{{ route('shops.products.index', $shop->id) }}" class="btn btn-outline-secondary">
+                        <a href="{{ request('_back') === 'products.all' ? route('products.all', ['shop_id' => $shop->id]) : route('shops.products.index', $shop->id) }}" class="btn btn-outline-secondary">
                             Huỷ
                         </a>
                     </div>

@@ -19,6 +19,7 @@ class Product extends Model
         'cost_price',
         'description',
         'is_active',
+        'sort_order',
         'created_by',
         'updated_by',
     ];
@@ -41,6 +42,12 @@ class Product extends Model
     public function orderItems(): HasMany
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    /** Lịch sử các phiên bản cũ (không bao gồm phiên bản hiện tại). */
+    public function histories(): HasMany
+    {
+        return $this->hasMany(ProductHistory::class)->orderBy('version', 'desc');
     }
 
     public function scopeActive($query)

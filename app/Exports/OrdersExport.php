@@ -33,7 +33,7 @@ class OrdersExport implements FromArray, WithHeadings, WithStyles, ShouldAutoSiz
                     $item->product_name,
                     $item->variant_name ?? '',
                     $item->quantity,
-                    $item->cost_price,
+                    $item->effective_cost_price,
                     $item->selling_price,
                     $isFirst ? (float) $order->fixed_fee : '',
                     $isFirst ? (float) $order->service_fee : '',

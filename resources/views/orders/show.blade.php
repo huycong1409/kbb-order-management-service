@@ -78,7 +78,7 @@
                             <td style="max-width:260px">{{ $item->product_name }}</td>
                             <td>{{ $item->variant_name ?? '—' }}</td>
                             <td class="text-end">{{ $item->quantity }}</td>
-                            <td class="text-end num">{{ number_format($item->cost_price) }}</td>
+                            <td class="text-end num">{{ number_format($item->effective_cost_price) }}</td>
                             <td class="text-end num">{{ number_format($item->selling_price) }}</td>
                             <td class="text-end num">{{ number_format($item->tax) }}</td>
                             <td class="text-end num">{{ number_format($item->total_cost) }}</td>

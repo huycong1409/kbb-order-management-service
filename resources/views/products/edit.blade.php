@@ -4,7 +4,7 @@
 
 @section('content')
 <div class="d-flex align-items-center gap-2 mb-3">
-    <a href="{{ route('shops.products.index', $shop->id) }}" class="btn btn-sm btn-outline-secondary">
+    <a href="{{ request('_back') === 'products.all' ? route('products.all', ['shop_id' => $shop->id]) : route('shops.products.index', $shop->id) }}" class="btn btn-sm btn-outline-secondary">
         <i class="bi bi-arrow-left"></i>
     </a>
     <h5 class="mb-0 fw-bold">Sửa: {{ Str::limit($product->name, 60) }}</h5>
@@ -12,6 +12,7 @@
 
 <form action="{{ route('shops.products.update', [$shop->id, $product->id]) }}" method="POST">
     @csrf @method('PUT')
+    <input type="hidden" name="_back" value="{{ request('_back', '') }}">
     <div class="row g-3">
         <div class="col-lg-7">
             <div class="card mb-3">
@@ -73,7 +74,7 @@
                         <button type="submit" class="btn btn-primary">
                             <i class="bi bi-check-lg"></i> Lưu thay đổi
                         </button>
-                        <a href="{{ route('shops.products.index', $shop->id) }}" class="btn btn-outline-secondary">
+                        <a href="{{ request('_back') === 'products.all' ? route('products.all', ['shop_id' => $shop->id]) : route('shops.products.index', $shop->id) }}" class="btn btn-outline-secondary">
                             Huỷ
                         </a>
                     </div>
@@ -86,6 +87,80 @@
         </div>
     </div>
 </form>
+
+{{-- Lịch sử phiên bản --}}
+@if($product->histories->isNotEmpty())
+<div class="mt-4">
+    <form action="{{ route('shops.products.current-version.destroy', [$shop->id, $product->id]) }}"
+          method="POST"
+          data-confirm="Xoá version hiện tại và khôi phục về version trước?"
+          onsubmit="return confirm(this.dataset.confirm)">
+        @csrf @method('DELETE')
+        <input type="hidden" name="_back" value="{{ request('_back', '') }}">
+        <button type="submit" class="btn btn-outline-warning btn-sm">
+            <i class="bi bi-arrow-counterclockwise"></i> Xoá version hiện tại
+        </button>
+    </form>
+</div>
+<div class="mt-4">
+    <h6 class="text-muted mb-2">
+        <i class="bi bi-clock-history me-1"></i> Lịch sử thay đổi
+        <span class="badge bg-secondary ms-1">{{ $product->histories->count() }}</span>
+    </h6>
+
+    @foreach($product->histories as $history)
+    <div class="card mb-2">
+        <div class="card-header d-flex justify-content-between align-items-center py-2">
+            <div>
+                <span class="badge bg-secondary me-1">v{{ $history->version }}</span>
+                <span class="text-muted small">
+                    {{ $history->effective_from->format('d/m/Y H:i') }}
+                    →
+                    {{ $history->effective_to?->format('d/m/Y H:i') ?? 'hiện tại' }}
+                </span>
+            </div>
+            <form action="{{ route('products.histories.destroy', [$product->id, $history->id]) }}"
+                  method="POST"
+                  data-confirm="Xoá phiên bản v{{ $history->version }}?"
+                  onsubmit="return confirm(this.dataset.confirm)">
+                @csrf @method('DELETE')
+                <input type="hidden" name="_back" value="{{ request('_back', '') }}">
+                <button type="submit" class="btn btn-sm btn-outline-danger">
+                    <i class="bi bi-trash"></i> Xoá version
+                </button>
+            </form>
+        </div>
+        <div class="card-body py-2">
+            <div class="row g-2">
+                <div class="col-md-5">
+                    <div class="mb-1">
+                        <span class="text-muted" style="font-size:0.75rem">Tên sản phẩm</span>
+                        <div class="fw-semibold" style="font-size:0.85rem">{{ $history->name }}</div>
+                    </div>
+                    <div>
+                        <span class="text-muted" style="font-size:0.75rem">Giá vốn mặc định</span>
+                        <div class="num" style="font-size:0.85rem">{{ number_format($history->cost_price) }}₫</div>
+                    </div>
+                </div>
+                <div class="col-md-7">
+                    <span class="text-muted d-block" style="font-size:0.75rem">Phân loại & Giá vốn</span>
+                    <div class="d-flex flex-wrap gap-1 mt-1">
+                        @foreach($history->variantHistories as $vh)
+                        <span class="badge bg-light text-dark border" style="font-size:0.7rem">
+                            {{ $vh->name }}:
+                            <span class="{{ $vh->cost_price > 0 ? 'text-success fw-semibold' : 'text-danger' }}">
+                                {{ number_format($vh->cost_price) }}₫
+                            </span>
+                        </span>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    @endforeach
+</div>
+@endif
 @endsection
 
 @push('scripts')

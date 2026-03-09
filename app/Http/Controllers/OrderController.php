@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Exports\OrdersExport;
 use App\Http\Requests\Order\ImportOrderRequest;
+use App\Models\DailyReport;
 use App\Services\OrderImportService;
 use App\Services\OrderService;
 use App\Services\ShopService;
@@ -32,7 +33,36 @@ class OrderController extends Controller
         $orders  = $this->orderService->list($filters, $perPage);
         $shops   = $this->shopService->allActive();
 
-        return view('orders.index', compact('orders', 'shops', 'filters', 'perPage'));
+        // Tính lợi nhuận trước ADS và chi phí ADS theo từng ngày
+        $rawDailyStats = $this->orderService->getDailyStats($filters);
+
+        // Lấy chi phí ADS từ daily_reports theo ngày + shop tương ứng
+        $allDates   = array_keys($rawDailyStats);
+        $allShopIds = collect($rawDailyStats)->flatMap(fn ($d) => $d['shop_ids'])->unique()->values()->toArray();
+
+        $adsMap = [];
+        if (!empty($allDates) && !empty($allShopIds)) {
+            DailyReport::whereIn('report_date', $allDates)
+                ->whereIn('shop_id', $allShopIds)
+                ->get()
+                ->each(function ($r) use (&$adsMap) {
+                    $day = $r->report_date->format('Y-m-d');
+                    $adsMap[$day] = ($adsMap[$day] ?? 0) + $r->ads_cost;
+                });
+        }
+
+        $dailyStats = [];
+        foreach ($rawDailyStats as $day => $data) {
+            $profitBeforeAds    = $data['profit'];
+            $adsCost            = $adsMap[$day] ?? 0;
+            $dailyStats[$day]   = [
+                'profit_before_ads' => $profitBeforeAds,
+                'ads_cost'          => $adsCost,
+                'profit'            => $profitBeforeAds - $adsCost,
+            ];
+        }
+
+        return view('orders.index', compact('orders', 'shops', 'filters', 'perPage', 'dailyStats'));
     }
 
     public function export(Request $request): BinaryFileResponse
@@ -74,7 +104,7 @@ class OrderController extends Controller
                 'product_name' => $i->product_name,
                 'variant_name' => $i->variant_name,
                 'quantity'     => $i->quantity,
-                'cost_price'   => $i->cost_price,
+                'cost_price'   => $i->effective_cost_price,
                 'selling_price'=> $i->selling_price,
                 'tax'          => round($i->tax, 0),
             ]),

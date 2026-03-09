@@ -2,8 +2,8 @@
 :root {
     /* Colors */
     --color-bg:           #f5f6fa;
-    --color-sidebar-bg:   #1e293b;
-    --color-sidebar-border: #334155;
+    --color-sidebar-bg:   #ffffff;
+    --color-sidebar-border: #e2e8f0;
     --color-border:       #e2e8f0;
     --color-text:         #374151;
     --color-text-muted:   #64748b;

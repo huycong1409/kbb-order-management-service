@@ -28,7 +28,7 @@ require APP_DIR . '/vendor/autoload.php';
 $app = require APP_DIR . '/bootstrap/app.php';
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 
-$commands = ['view:clear', 'cache:clear', 'config:cache', 'route:cache'];
+$commands = ['migrate --force', 'view:clear', 'cache:clear', 'config:cache', 'route:cache'];
 foreach ($commands as $cmd) {
     $kernel->call($cmd);
     echo "✓ php artisan $cmd\n" . trim($kernel->output()) . "\n\n";

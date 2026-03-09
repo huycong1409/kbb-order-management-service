@@ -5,6 +5,7 @@ namespace App\Repositories;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Repositories\Contracts\OrderRepositoryInterface;
+use stdClass;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -17,7 +18,7 @@ class OrderRepository implements OrderRepositoryInterface
         $sortCol  = in_array($filters['sort'] ?? '', $sortable) ? $filters['sort'] : 'order_date';
         $sortDir  = ($filters['dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
 
-        $query = Order::with(['shop', 'items']);
+        $query = Order::with(['shop', 'items.productVariant', 'items.product', 'items.order']);
 
         if ($sortCol === 'profit') {
             $query->orderByRaw('
@@ -90,7 +91,7 @@ class OrderRepository implements OrderRepositoryInterface
 
     public function find(int $id): Order
     {
-        return Order::with(['shop', 'items.product', 'items.productVariant'])->findOrFail($id);
+        return Order::with(['shop', 'items.product', 'items.productVariant', 'items.order'])->findOrFail($id);
     }
 
     public function findByCode(int $shopId, string $orderCode): ?Order
@@ -143,7 +144,7 @@ class OrderRepository implements OrderRepositoryInterface
 
     public function getForExport(array $filters = []): Collection
     {
-        $query = Order::with(['shop', 'items']);
+        $query = Order::with(['shop', 'items.productVariant', 'items.product', 'items.order']);
 
         if (!empty($filters['shop_id'])) {
             $query->where('shop_id', $filters['shop_id']);
@@ -182,7 +183,7 @@ class OrderRepository implements OrderRepositoryInterface
      */
     public function getProfitByDate(int $shopId, string $date): float
     {
-        $orders = Order::with('items')
+        $orders = Order::with(['items.productVariant', 'items.product', 'items.order'])
             ->forShop($shopId)
             ->whereDate('order_date', $date)
             ->get();
@@ -195,7 +196,7 @@ class OrderRepository implements OrderRepositoryInterface
      */
     public function getProfitByMonth(int $shopId, int $year, int $month): float
     {
-        $orders = Order::with('items')
+        $orders = Order::with(['items.productVariant', 'items.product', 'items.order'])
             ->forShop($shopId)
             ->whereYear('order_date', $year)
             ->whereMonth('order_date', $month)
@@ -205,11 +206,61 @@ class OrderRepository implements OrderRepositoryInterface
     }
 
     /**
+     * Thống kê doanh số / vốn / lợi nhuận nhóm theo sản phẩm + shop.
+     * Sử dụng PHP accessor (effective_cost_price) để tính vốn chính xác.
+     */
+    public function getProductStats(array $filters): Collection
+    {
+        $query = OrderItem::with(['order', 'product', 'productVariant'])
+            ->whereHas('order', function ($q) use ($filters) {
+                if (!empty($filters['shop_id'])) {
+                    $q->where('shop_id', $filters['shop_id']);
+                }
+                if (!empty($filters['shop_ids'])) {
+                    $q->whereIn('shop_id', $filters['shop_ids']);
+                }
+                if (!empty($filters['date_from'])) {
+                    $q->whereDate('order_date', '>=', $filters['date_from']);
+                }
+                if (!empty($filters['date_to'])) {
+                    $q->whereDate('order_date', '<=', $filters['date_to']);
+                }
+            });
+
+        if (!empty($filters['product_ids'])) {
+            $query->whereIn('product_id', $filters['product_ids']);
+        }
+
+        $items = $query->get();
+
+        return $items
+            ->groupBy(function ($item) {
+                $pid = $item->product_id ?? 'n_' . md5($item->product_name);
+                $sid = $item->order->shop_id;
+                return "{$pid}_{$sid}";
+            })
+            ->map(function ($group) {
+                $first = $group->first();
+                return (object) [
+                    'product_id'    => $first->product_id,
+                    'product_name'  => $first->product_name,
+                    'shop_id'       => $first->order->shop_id,
+                    'total_qty'     => (int) $group->sum('quantity'),
+                    'total_revenue' => (float) $group->sum('selling_price'),
+                    'total_cost'    => (float) $group->sum('total_cost'),
+                    'total_profit'  => (float) $group->sum('item_profit_before_shared_fees'),
+                ];
+            })
+            ->sortByDesc('total_revenue')
+            ->values();
+    }
+
+    /**
      * Trả về tóm tắt tháng: số đơn, doanh thu, lợi nhuận trước ADS.
      */
     public function getMonthSummaryStats(int $shopId, int $year, int $month): array
     {
-        $orders = Order::with('items')
+        $orders = Order::with(['items.productVariant', 'items.product', 'items.order'])
             ->forShop($shopId)
             ->whereYear('order_date', $year)
             ->whereMonth('order_date', $month)
@@ -221,5 +272,65 @@ class OrderRepository implements OrderRepositoryInterface
             'total_cost'    => (float) $orders->sum(fn ($o) => $o->total_cost),
             'profit'        => (float) $orders->sum(fn ($o) => $o->profit),
         ];
+    }
+
+    /**
+     * Lợi nhuận (trước ADS) mỗi ngày + shop_ids xuất hiện trong ngày đó.
+     * Áp dụng cùng bộ filter như paginate (không bao gồm sort/pagination).
+     * Trả về: ['2026-03-09' => ['profit' => 1200000, 'shop_ids' => [1, 2]], ...]
+     */
+    public function getDailyStats(array $filters): array
+    {
+        $query = Order::with(['items.productVariant', 'items.product', 'items.order']);
+
+        if (!empty($filters['shop_id'])) {
+            $query->where('shop_id', $filters['shop_id']);
+        }
+
+        if (!empty($filters['search'])) {
+            $query->where(function ($q) use ($filters) {
+                $q->where('order_code', 'like', "%{$filters['search']}%")
+                  ->orWhereHas('items', function ($q2) use ($filters) {
+                      $q2->where('product_name', 'like', "%{$filters['search']}%")
+                         ->orWhere('product_sku', 'like', "%{$filters['search']}%");
+                  });
+            });
+        }
+
+        if (!empty($filters['product_name'])) {
+            $query->whereHas('items', function ($q) use ($filters) {
+                $q->where('product_name', 'like', "%{$filters['product_name']}%");
+            });
+        }
+
+        if (!empty($filters['date_from'])) {
+            $query->whereDate('order_date', '>=', $filters['date_from']);
+        }
+
+        if (!empty($filters['date_to'])) {
+            $query->whereDate('order_date', '<=', $filters['date_to']);
+        }
+
+        if (!empty($filters['loss_only'])) {
+            $query->whereRaw('
+                (SELECT COALESCE(SUM(oi.selling_price),0) FROM order_items oi WHERE oi.order_id = orders.id)
+                - (orders.fixed_fee + orders.service_fee + orders.payment_fee + orders.pi_ship)
+                - (SELECT COALESCE(SUM(oi2.selling_price * 0.015),0) FROM order_items oi2 WHERE oi2.order_id = orders.id)
+                - (SELECT COALESCE(SUM(oi3.quantity * oi3.cost_price),0) FROM order_items oi3 WHERE oi3.order_id = orders.id)
+                < 0
+            ');
+        }
+
+        $orders = $query->get();
+
+        $result = [];
+        foreach ($orders->groupBy(fn ($o) => $o->order_date->format('Y-m-d')) as $day => $group) {
+            $result[$day] = [
+                'profit'   => (float) $group->sum(fn ($o) => $o->profit),
+                'shop_ids' => $group->pluck('shop_id')->unique()->values()->toArray(),
+            ];
+        }
+
+        return $result;
     }
 }

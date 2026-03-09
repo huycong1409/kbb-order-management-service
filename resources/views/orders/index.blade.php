@@ -3,22 +3,100 @@
 @section('breadcrumb', 'Đơn hàng')
 
 @push('styles')
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <style>
-.orders-table { table-layout: auto; }
-.orders-table th { white-space: nowrap; font-size: 0.75rem; padding: .35rem .55rem; }
-.orders-table td { white-space: nowrap; font-size: 0.82rem; padding: .35rem .55rem; }
-.order-first-row > td { background: #eff6ff !important; border-top: 2px solid #93c5fd !important; }
-.order-sub-row > td { background: #f8fafc; }
-.order-total-row > td { background: #f0fdf4; border-bottom: 2px solid #86efac; }
-.order-total-row td { font-weight: 600; font-size: 0.82rem; }
-.col-money { text-align: right; font-family: 'Courier New', monospace; font-size: 0.875rem; }
-.profit-positive { color: #059669; font-weight: 700; }
-.profit-negative { color: #dc2626; font-weight: 700; }
-.order-loss-first > td { background: #fff1f2 !important; border-top: 2px solid #fca5a5 !important; }
-.order-loss-sub > td { background: #fff5f5 !important; }
-/* Ép table không vỡ ra ngoài main-content */
-.main-content { min-width: 0; overflow-x: hidden; }
-.table-scroll-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+/* ─── Table ────────────────────────────────────────────────────────────────── */
+.orders-table { table-layout: auto; border-collapse: separate; border-spacing: 0; }
+.orders-table th {
+    white-space: nowrap;
+    font-size: 1rem;
+    padding: .4rem .55rem;
+    background: #f1f5f9;
+    border-bottom: 2px solid #cbd5e1;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+.orders-table td { white-space: nowrap; font-size: 1.12rem; padding: .38rem .55rem; }
+
+/* ─── Row grouping — left border indicator ──────────────────────────────────── */
+.order-first-row > td {
+    background: #fff;
+    border-top: 2px solid #94a3b8;
+    border-bottom: 0;
+}
+.order-first-row > td:first-child { border-left: 3px solid #3b82f6; }
+
+.order-sub-row > td    { background: #fff; border-top: 0; border-bottom: 0; }
+.order-sub-row > td:first-child { border-left: 3px solid #bfdbfe; }
+
+.order-total-row > td {
+    background: #fff;
+    font-weight: 600;
+    font-size: 1.12rem;
+    border-top: 0;
+    border-bottom: 0;
+}
+
+.order-loss-first > td {
+    background: #fff;
+    border-top: 2px solid #94a3b8;
+    border-bottom: 0;
+}
+.order-loss-first > td:first-child { border-left: 3px solid #ef4444; }
+.order-loss-sub > td   { background: #fff; border-top: 0; border-bottom: 0; }
+.order-loss-sub > td:first-child { border-left: 3px solid #fca5a5; }
+
+/* ─── Money columns ─────────────────────────────────────────────────────────── */
+.col-money {
+    text-align: right;
+    font-size: 1.19rem;
+    font-variant-numeric: tabular-nums;
+}
+.profit-positive { color: #059669; font-weight: 700; font-size: 1.26rem; }
+.profit-negative { color: #dc2626; font-weight: 700; font-size: 1.26rem; }
+
+/* ─── Sticky container (filter + stats + table header + pagination) ─────────── */
+#stickyContainer {
+    position: sticky;
+    top: 44px; /* JS ghi đè */
+    z-index: 90;
+    display: flex;
+    flex-direction: column;
+    /* height set by JS = 100vh - topbarH */
+}
+#stickyContainer .card {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* ─── Sticky bar (filter + stats — không cần sticky riêng nữa) ─────────────── */
+#stickyBar {
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+    box-shadow: 0 2px 4px rgba(0,0,0,.06);
+    margin: 0 -1.5rem;
+    padding: 0 1.5rem;
+}
+.filter-row { padding: .45rem 0; border-bottom: 1px solid #f0f4f8; }
+
+/* ─── Stat bar ──────────────────────────────────────────────────────────────── */
+.stat-bar {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    padding: .3rem 0;
+}
+.stat-bar .s-item { display: flex; flex-direction: column; }
+.stat-bar .s-lbl { font-size: .67rem; color: #94a3b8; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
+.stat-bar .s-val { font-size: 1.05rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ─── Scroll wrapper: flex:1 để tự fill khoảng còn lại, cuộn cả 2 chiều ─────── */
+.table-scroll-wrapper { flex: 1; min-height: 0; overflow-x: auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+/* ─── Sort + copy ────────────────────────────────────────────────────────────── */
 .btn-copy {
     background: none; border: none; padding: 0 2px; color: #94a3b8;
     cursor: pointer; font-size: .75rem; line-height: 1; opacity: 0;
@@ -31,11 +109,59 @@ tr:hover .btn-copy { opacity: 1; }
 .sort-link:hover { color: #0ea5e9; }
 .sort-icon { font-size: .65rem; opacity: .4; }
 .sort-icon.active { opacity: 1; color: #0ea5e9; }
+
+/* ─── Date separator row ─────────────────────────────────────────────────────── */
+.date-sep-row > td {
+    background: #fef3c7;
+    border-top: 0 !important;
+    border-bottom: 0 !important;
+    padding: .5rem 1rem;
+    text-align: center;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #92400e;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+/* ─── Date info row (tóm tắt ngày: lợi nhuận trước ADS / ADS / lợi nhuận) ───── */
+.date-info-row > td {
+    background: #fffbeb;
+    border-top: 0 !important;
+    border-bottom: 1px solid #fde68a !important;
+    padding: .45rem 1rem .5rem;
+}
+.date-info-row .di-items {
+    display: flex;
+    gap: 1.6rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+.date-info-row .di-item {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: 1rem;
+}
+.date-info-row .di-lbl {
+    color: #92400e;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.date-info-row .di-val {
+    font-weight: 700;
+    font-size: 1.1rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* ─── Flatpickr ──────────────────────────────────────────────────────────────── */
+.flatpickr-input[readonly] { background: #fff; }
 </style>
 @endpush
 
 @section('content')
-<div class="d-flex justify-content-between align-items-center mb-3">
+{{-- Page title (cuộn bình thường, không sticky) ─────────────────────────────── --}}
+<div class="d-flex justify-content-between align-items-center mb-2">
     <div>
         <h5 class="mb-0 fw-bold">Danh sách Đơn hàng</h5>
         <small class="text-muted">
@@ -48,7 +174,7 @@ tr:hover .btn-copy { opacity: 1; }
         </small>
     </div>
     <div class="d-flex gap-2">
-        <a href="{{ route('orders.export', request()->query()) }}" class="btn btn-outline-success btn-sm">
+        <a href="{{ route('orders.export', request()->query()) }}" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-download"></i> Xuất Excel
         </a>
         <a href="{{ route('orders.import-form') }}" class="btn btn-success btn-sm">
@@ -57,91 +183,84 @@ tr:hover .btn-copy { opacity: 1; }
     </div>
 </div>
 
-{{-- Filters --}}
-<div class="card mb-3">
-    <div class="card-body py-2">
-        <form method="GET" class="d-flex flex-wrap gap-2 align-items-end">
-            <div>
-                <label class="form-label mb-1 fw-semibold" style="font-size:.75rem">Shop</label>
-                <select name="shop_id" class="form-select form-select-sm" style="width:180px">
-                    <option value="">Tất cả Shop</option>
-                    @foreach($shops as $shop)
-                        <option value="{{ $shop->id }}" {{ request('shop_id') == $shop->id ? 'selected' : '' }}>
-                            {{ $shop->name }}
-                        </option>
-                    @endforeach
-                </select>
-            </div>
-            <div>
-                <label class="form-label mb-1 fw-semibold" style="font-size:.75rem">Từ ngày</label>
-                <input type="date" name="date_from" class="form-control form-control-sm"
-                       value="{{ request('date_from') }}" style="width:145px">
-            </div>
-            <div>
-                <label class="form-label mb-1 fw-semibold" style="font-size:.75rem">Đến ngày</label>
-                <input type="date" name="date_to" class="form-control form-control-sm"
-                       value="{{ request('date_to') }}" style="width:145px">
-            </div>
-            <div>
-                <label class="form-label mb-1 fw-semibold" style="font-size:.75rem">Tên sản phẩm</label>
-                <input type="text" name="product_name" class="form-control form-control-sm"
-                       value="{{ request('product_name') }}" placeholder="VD: lót ly, khay..." style="width:200px">
-            </div>
-            <div>
-                <label class="form-label mb-1 fw-semibold" style="font-size:.75rem">Tìm kiếm</label>
-                <input type="text" name="search" class="form-control form-control-sm"
-                       value="{{ request('search') }}" placeholder="Mã đơn, tên SP..." style="width:180px">
-            </div>
-            <div class="align-self-end">
-                <div class="form-check form-switch mb-0" style="padding-top:.3rem">
-                    <input class="form-check-input" type="checkbox" name="loss_only" id="lossOnly"
-                           value="1" {{ request('loss_only') ? 'checked' : '' }} onchange="this.form.submit()">
-                    <label class="form-check-label text-danger fw-semibold" for="lossOnly" style="font-size:.8rem">
-                        Đơn lỗ
-                    </label>
-                </div>
-            </div>
-            <div class="d-flex gap-1 align-self-end">
-                <button type="submit" class="btn btn-sm btn-primary">
-                    <i class="bi bi-search"></i> Lọc
-                </button>
-                @if(request()->hasAny(['shop_id','date_from','date_to','search','product_id','product_name','loss_only']))
-                    <a href="{{ route('orders.index') }}" class="btn btn-sm btn-outline-secondary">
-                        <i class="bi bi-x"></i>
-                    </a>
-                @endif
-            </div>
-        </form>
-    </div>
-</div>
-
-{{-- Summary stats --}}
-@php
-    $totalSelling = $orders->getCollection()->flatMap->items->sum('selling_price');
-    $totalProfit  = $orders->getCollection()->sum(fn($o) => $o->profit);
-@endphp
-<div class="row g-2 mb-3">
-    <div class="col-auto">
-        <div class="stat-card" style="background:#3b82f6">
-            <div class="label">Tổng đơn (trang này)</div>
-            <div class="value">{{ $orders->count() }}</div>
+{{-- Sticky container: filter + stats + table header đều dính cùng nhau ───────── --}}
+<div id="stickyContainer">
+{{-- Sticky bar: bộ lọc + chỉ số ────────────────────────────────────────────── --}}
+<div id="stickyBar">
+    <form method="GET" class="filter-row d-flex flex-wrap gap-2 align-items-end" id="filterForm">
+        <div>
+            <label class="form-label mb-1 fw-semibold" style="font-size:.72rem">Shop</label>
+            <select name="shop_id" class="form-select form-select-sm" style="width:170px">
+                <option value="">Tất cả Shop</option>
+                @foreach($shops as $shop)
+                    <option value="{{ $shop->id }}" {{ request('shop_id') == $shop->id ? 'selected' : '' }}>
+                        {{ $shop->name }}
+                    </option>
+                @endforeach
+            </select>
         </div>
-    </div>
-    <div class="col-auto">
-        <div class="stat-card" style="background:#8b5cf6">
-            <div class="label">Tổng giá bán</div>
-            <div class="value">{{ number_format($totalSelling) }}₫</div>
+        <div>
+            <label class="form-label mb-1 fw-semibold" style="font-size:.72rem">Từ ngày</label>
+            <input type="text" name="date_from" id="dateFrom" class="form-control form-control-sm"
+                   value="{{ request('date_from') }}" style="width:120px" placeholder="dd/mm/yyyy" readonly>
         </div>
-    </div>
-    <div class="col-auto">
-        <div class="stat-card" style="background:{{ $totalProfit >= 0 ? '#059669' : '#dc2626' }}">
-            <div class="label">Lợi nhuận</div>
-            <div class="value">{{ number_format($totalProfit) }}₫</div>
+        <div>
+            <label class="form-label mb-1 fw-semibold" style="font-size:.72rem">Đến ngày</label>
+            <input type="text" name="date_to" id="dateTo" class="form-control form-control-sm"
+                   value="{{ request('date_to') }}" style="width:120px" placeholder="dd/mm/yyyy" readonly>
+        </div>
+        <div>
+            <label class="form-label mb-1 fw-semibold" style="font-size:.72rem">Tên sản phẩm</label>
+            <input type="text" name="product_name" class="form-control form-control-sm"
+                   value="{{ request('product_name') }}" placeholder="VD: lót ly, khay..." style="width:180px">
+        </div>
+        <div>
+            <label class="form-label mb-1 fw-semibold" style="font-size:.72rem">Tìm kiếm</label>
+            <input type="text" name="search" class="form-control form-control-sm"
+                   value="{{ request('search') }}" placeholder="Mã đơn, tên SP..." style="width:160px">
+        </div>
+        <div class="align-self-end">
+            <div class="form-check form-switch mb-0" style="padding-top:.3rem">
+                <input class="form-check-input" type="checkbox" name="loss_only" id="lossOnly"
+                       value="1" {{ request('loss_only') ? 'checked' : '' }} onchange="this.form.submit()">
+                <label class="form-check-label text-danger fw-semibold" for="lossOnly" style="font-size:.8rem">Đơn lỗ</label>
+            </div>
+        </div>
+        <div class="d-flex gap-1 align-self-end">
+            <button type="submit" class="btn btn-sm btn-primary">
+                <i class="bi bi-search"></i> Lọc
+            </button>
+            @if(request()->hasAny(['shop_id','date_from','date_to','search','product_id','product_name','loss_only']))
+                <a href="{{ route('orders.index') }}" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-x"></i>
+                </a>
+            @endif
+        </div>
+    </form>
+    @php
+        $totalSelling = $orders->getCollection()->flatMap->items->sum('selling_price');
+        $totalProfit  = $orders->getCollection()->sum(fn($o) => $o->profit);
+    @endphp
+    <div class="stat-bar">
+        <div class="s-item">
+            <span class="s-lbl">Đơn (trang này)</span>
+            <span class="s-val" style="color:#3b82f6">{{ $orders->count() }}</span>
+        </div>
+        <div class="s-item">
+            <span class="s-lbl">Tổng giá bán</span>
+            <span class="s-val" style="color:#7c3aed">{{ number_format($totalSelling) }}₫</span>
+        </div>
+        <div class="s-item">
+            <span class="s-lbl">Lợi nhuận</span>
+            <span class="s-val {{ $totalProfit >= 0 ? 'profit-positive' : 'profit-negative' }}">
+                {{ number_format($totalProfit) }}₫
+            </span>
         </div>
     </div>
 </div>
 
-<div class="card">
+{{-- Table card (nằm trong #stickyContainer, pagination ở dưới cùng) ──────────── --}}
+<div class="card mt-2 mb-0">
     <div class="table-scroll-wrapper">
         <table class="table orders-table mb-0">
             @php
@@ -176,7 +295,7 @@ tr:hover .btn-copy { opacity: 1; }
                             Tổng giá bán {!! $sortIcon('total_selling') !!}
                         </a>
                     </th>
-                    <th class="col-money">Phí cố định</th>
+                    <th class="col-money">Phí CĐ</th>
                     <th class="col-money">Phí DV</th>
                     <th class="col-money">Phí TT</th>
                     <th class="col-money">Pi Ship</th>
@@ -190,35 +309,71 @@ tr:hover .btn-copy { opacity: 1; }
                 </tr>
             </thead>
             <tbody>
+                @php $prevDate = null; @endphp
                 @forelse($orders as $order)
                     @php
-                        $items        = $order->items;
-                        $itemCount    = $items->count();
-                        $orderProfit  = $order->profit;
+                        $items       = $order->items;
+                        $itemCount   = $items->count();
+                        $orderProfit = $order->profit;
+                        $isLoss      = $orderProfit < 0;
+                        $orderDay    = $order->order_date->format('Y-m-d');
                     @endphp
+
+                    {{-- Date separator khi sang ngày mới --}}
+                    @if($orderDay !== $prevDate)
+                    @php
+                        $prevDate = $orderDay;
+                        $ds = $dailyStats[$orderDay] ?? null;
+                    @endphp
+                    <tr class="date-sep-row">
+                        <td colspan="15">
+                            <i class="bi bi-calendar3 me-1"></i>
+                            {{ $order->order_date->locale('vi')->isoFormat('dddd, DD/MM/YYYY') }}
+                        </td>
+                    </tr>
+                    @if($ds)
+                    @php
+                        $dsProfit    = $ds['profit_before_ads'];
+                        $dsAds       = $ds['ads_cost'];
+                        $dsNet       = $ds['profit'];
+                        $netClass    = $dsNet >= 0 ? 'profit-positive' : 'profit-negative';
+                        $profClass   = $dsProfit >= 0 ? 'profit-positive' : 'profit-negative';
+                    @endphp
+                    <tr class="date-info-row">
+                        <td colspan="15">
+                            <div class="di-items">
+                                <span class="di-item">
+                                    <span class="di-lbl">LN trước ADS:</span>
+                                    <span class="di-val {{ $profClass }}">{{ number_format($dsProfit) }}₫</span>
+                                </span>
+                                <span class="di-item">
+                                    <span class="di-lbl">Chi phí ADS:</span>
+                                    <span class="di-val text-danger">{{ number_format($dsAds) }}₫</span>
+                                </span>
+                                <span class="di-item">
+                                    <span class="di-lbl">Lợi nhuận:</span>
+                                    <span class="di-val {{ $netClass }}">{{ number_format($dsNet) }}₫</span>
+                                </span>
+                            </div>
+                        </td>
+                    </tr>
+                    @endif
+                    @endif
 
                     @foreach($items as $idx => $item)
                     @php
-                        $isFirst = ($idx === 0);
-                        $tax     = $item->tax;
-                        $tVon    = $item->total_cost;
-                    @endphp
-                    @php
-                        $isLoss = $orderProfit < 0;
+                        $isFirst  = ($idx === 0);
                         $rowClass = $isFirst
                             ? ($isLoss ? 'order-loss-first' : 'order-first-row')
                             : ($isLoss ? 'order-loss-sub'   : 'order-sub-row');
                     @endphp
                     <tr class="{{ $rowClass }}">
-                        {{-- Mã đơn: chỉ hiển thị ở dòng đầu --}}
                         <td>
                             @if($isFirst)
                                 <div class="d-flex align-items-center gap-1">
                                     <a href="#" onclick="openPreview({{ $order->id }}, '{{ route('orders.show', $order->id) }}'); return false;"
-                                       class="fw-semibold text-decoration-none text-primary"
-                                       title="Xem nhanh">
-                                        {{ $order->order_code }}
-                                    </a>
+                                       class="fw-semibold text-decoration-none text-primary" style="font-size:1.09rem"
+                                       title="Xem nhanh">{{ $order->order_code }}</a>
                                     <button type="button" class="btn-copy" title="Copy mã đơn"
                                             onclick="copyCode('{{ $order->order_code }}', this)">
                                         <i class="bi bi-clipboard"></i>
@@ -226,30 +381,25 @@ tr:hover .btn-copy { opacity: 1; }
                                 </div>
                             @endif
                         </td>
-                        <td>{{ $isFirst ? $order->order_date->format('d/m/Y H:i') : '' }}</td>
+                        <td style="font-size:1.09rem; color:#64748b">{{ $isFirst ? $order->order_date->format('d/m/Y H:i') : '' }}</td>
                         <td>
                             @if($isFirst)
-                                <span class="badge bg-danger-subtle text-danger" style="font-size:.65rem">
+                                <span class="badge bg-secondary-subtle text-secondary" style="font-size:.91rem; font-weight:600">
                                     {{ $order->shop->name ?? '—' }}
                                 </span>
                             @endif
                         </td>
-                        <td style="max-width:280px; white-space:normal">{{ $item->product_name }}</td>
-                        <td>{{ $item->variant_name ?? '—' }}</td>
+                        <td style="max-width:260px; white-space:normal; font-size:1.09rem">{{ $item->product_name }}</td>
+                        <td style="font-size:1.09rem; color:#64748b">{{ $item->variant_name ?? '—' }}</td>
                         <td class="col-money">{{ $item->quantity }}</td>
-                        <td class="col-money">{{ number_format($item->cost_price) }}</td>
-                        <td class="col-money">{{ number_format($item->selling_price) }}</td>
-
-                        {{-- Phí: chỉ dòng đầu --}}
-                        <td class="col-money">{{ $isFirst ? number_format($order->fixed_fee) : '' }}</td>
-                        <td class="col-money">{{ $isFirst ? number_format($order->service_fee) : '' }}</td>
-                        <td class="col-money">{{ $isFirst ? number_format($order->payment_fee) : '' }}</td>
-                        <td class="col-money">{{ $isFirst ? number_format($order->pi_ship) : '' }}</td>
-
-                        <td class="col-money">{{ number_format($tax) }}</td>
-                        <td class="col-money">{{ number_format($tVon) }}</td>
-
-                        {{-- Lợi nhuận: chỉ dòng đầu cho toàn đơn --}}
+                        <td class="col-money text-secondary">{{ number_format($item->effective_cost_price) }}</td>
+                        <td class="col-money fw-semibold">{{ number_format($item->selling_price) }}</td>
+                        <td class="col-money text-muted">{{ $isFirst ? number_format($order->fixed_fee) : '' }}</td>
+                        <td class="col-money text-muted">{{ $isFirst ? number_format($order->service_fee) : '' }}</td>
+                        <td class="col-money text-muted">{{ $isFirst ? number_format($order->payment_fee) : '' }}</td>
+                        <td class="col-money text-muted">{{ $isFirst ? number_format($order->pi_ship) : '' }}</td>
+                        <td class="col-money text-muted">{{ number_format($item->tax) }}</td>
+                        <td class="col-money text-secondary">{{ number_format($item->total_cost) }}</td>
                         <td class="col-money">
                             @if($isFirst)
                                 <span class="{{ $orderProfit >= 0 ? 'profit-positive' : 'profit-negative' }}">
@@ -260,19 +410,18 @@ tr:hover .btn-copy { opacity: 1; }
                     </tr>
                     @endforeach
 
-                    {{-- Total row nếu có nhiều item --}}
                     @if($itemCount > 1)
                     <tr class="order-total-row">
-                        <td colspan="7" class="text-end text-muted">
+                        <td colspan="7" class="text-end text-muted" style="font-size:1.05rem">
                             Tổng {{ $itemCount }} sản phẩm:
                         </td>
                         <td class="col-money">{{ number_format($order->total_selling_price) }}</td>
-                        <td class="col-money">{{ number_format($order->fixed_fee) }}</td>
-                        <td class="col-money">{{ number_format($order->service_fee) }}</td>
-                        <td class="col-money">{{ number_format($order->payment_fee) }}</td>
-                        <td class="col-money">{{ number_format($order->pi_ship) }}</td>
-                        <td class="col-money">{{ number_format($order->total_tax) }}</td>
-                        <td class="col-money">{{ number_format($order->total_cost) }}</td>
+                        <td class="col-money text-muted">{{ number_format($order->fixed_fee) }}</td>
+                        <td class="col-money text-muted">{{ number_format($order->service_fee) }}</td>
+                        <td class="col-money text-muted">{{ number_format($order->payment_fee) }}</td>
+                        <td class="col-money text-muted">{{ number_format($order->pi_ship) }}</td>
+                        <td class="col-money text-muted">{{ number_format($order->total_tax) }}</td>
+                        <td class="col-money text-secondary">{{ number_format($order->total_cost) }}</td>
                         <td class="col-money {{ $orderProfit >= 0 ? 'profit-positive' : 'profit-negative' }}">
                             {{ number_format($orderProfit) }}
                         </td>
@@ -290,7 +439,8 @@ tr:hover .btn-copy { opacity: 1; }
             </tbody>
         </table>
     </div>
-    <div class="card-footer bg-white">
+    {{-- Pagination nằm trong card, luôn hiển thị ở dưới bảng ──────────────────── --}}
+    <div class="card-footer bg-white flex-shrink-0">
         @if($orders->hasPages())
         <div class="d-flex justify-content-center">
             {{ $orders->appends(request()->query())->links() }}
@@ -317,7 +467,9 @@ tr:hover .btn-copy { opacity: 1; }
         </div>
     </div>
 </div>
-{{-- Overlay + Drawer xem nhanh đơn hàng --}}
+</div>{{-- đóng #stickyContainer --}}
+
+{{-- Drawer xem nhanh ──────────────────────────────────────────────────────── --}}
 <div id="drawerOverlay" onclick="closeDrawer()"
      style="display:none; position:fixed; inset:0; z-index:1040; background:rgba(0,0,0,.35)"></div>
 
@@ -325,7 +477,6 @@ tr:hover .btn-copy { opacity: 1; }
      style="position:fixed; top:0; right:-520px; width:520px; max-width:100vw; height:100vh;
             z-index:1050; background:#fff; box-shadow:-4px 0 24px rgba(0,0,0,.18);
             transition:right .22s ease; display:flex; flex-direction:column; overflow:hidden">
-    {{-- Header --}}
     <div class="d-flex align-items-center justify-content-between px-3 py-2" style="background:#1e293b; flex-shrink:0">
         <h6 class="mb-0 text-white">
             <i class="bi bi-receipt me-1"></i>
@@ -334,7 +485,6 @@ tr:hover .btn-copy { opacity: 1; }
         </h6>
         <button onclick="closeDrawer()" class="btn-close btn-close-white" style="font-size:.75rem"></button>
     </div>
-    {{-- Body --}}
     <div style="flex:1; overflow-y:auto">
         <div id="pm-loading" class="text-center py-5">
             <div class="spinner-border spinner-border-sm text-primary"></div>
@@ -370,7 +520,6 @@ tr:hover .btn-copy { opacity: 1; }
             </div>
         </div>
     </div>
-    {{-- Footer --}}
     <div class="d-flex gap-2 justify-content-end px-3 py-2" style="border-top:1px solid #e2e8f0; flex-shrink:0">
         <a id="pm-detail-link" href="#" class="btn btn-sm btn-primary">
             <i class="bi bi-arrow-right-circle"></i> Xem chi tiết
@@ -378,9 +527,34 @@ tr:hover .btn-copy { opacity: 1; }
         <button onclick="closeDrawer()" class="btn btn-sm btn-outline-secondary">Đóng</button>
     </div>
 </div>
+@endsection
 
 @push('scripts')
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/vn.js"></script>
 <script>
+// ── Flatpickr date inputs ──────────────────────────────────────────────────────
+const fpOpts = { dateFormat: 'Y-m-d', altInput: true, altFormat: 'd/m/Y', allowInput: true, locale: 'vn' };
+flatpickr('#dateFrom', fpOpts);
+flatpickr('#dateTo',   fpOpts);
+
+// ── Sticky layout: stickyContainer chiếm đúng phần còn lại của viewport ────────
+document.addEventListener('DOMContentLoaded', () => {
+    const topbar    = document.querySelector('.topbar');
+    const container = document.getElementById('stickyContainer');
+    if (!topbar || !container) return;
+
+    function updateLayout() {
+        const topH = topbar.offsetHeight;
+        container.style.top    = topH + 'px';
+        container.style.height = (window.innerHeight - topH) + 'px';
+    }
+
+    updateLayout();
+    window.addEventListener('resize', updateLayout, { passive: true });
+});
+
+// ── Copy mã đơn ───────────────────────────────────────────────────────────────
 function copyCode(code, btn) {
     navigator.clipboard.writeText(code).then(() => {
         const icon = btn.querySelector('i');
@@ -393,22 +567,19 @@ function copyCode(code, btn) {
     });
 }
 
-// ── Drawer xem nhanh đơn hàng ──────────────────────────────
+// ── Drawer xem nhanh ──────────────────────────────────────────────────────────
 function fmt(n) {
     if (n === '' || n === null || n === undefined) return '—';
     return Math.round(Number(n)).toLocaleString('vi-VN');
 }
-
 function closeDrawer() {
     document.getElementById('orderDrawer').style.right = '-520px';
     document.getElementById('drawerOverlay').style.display = 'none';
 }
-
 function openPreview(id, detailUrl) {
     document.getElementById('pm-loading').style.display = '';
     document.getElementById('pm-content').style.display = 'none';
     document.getElementById('pm-detail-link').href = detailUrl;
-
     document.getElementById('drawerOverlay').style.display = '';
     document.getElementById('orderDrawer').style.right = '0';
 
@@ -428,10 +599,9 @@ function openPreview(id, detailUrl) {
             document.getElementById('pm-cost').textContent     = fmt(d.total_cost);
             const profitEl = document.getElementById('pm-profit');
             profitEl.textContent = fmt(d.profit);
-            profitEl.className = d.profit >= 0 ? 'profit-positive' : 'profit-negative';
+            profitEl.className   = d.profit >= 0 ? 'profit-positive' : 'profit-negative';
 
-            const tbody = document.getElementById('pm-items');
-            tbody.innerHTML = d.items.map(i => `
+            document.getElementById('pm-items').innerHTML = d.items.map(i => `
                 <tr>
                     <td>${i.product_name}</td>
                     <td>${i.variant_name || '—'}</td>
@@ -446,9 +616,6 @@ function openPreview(id, detailUrl) {
             document.getElementById('pm-content').style.display = '';
         });
 }
-
-// Đóng drawer khi nhấn ESC
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
 </script>
 @endpush
-@endsection

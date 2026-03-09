@@ -36,4 +36,9 @@ class OrderService
     {
         return $this->orderRepository->getProfitByMonth($shopId, $year, $month);
     }
+
+    public function getDailyStats(array $filters): array
+    {
+        return $this->orderRepository->getDailyStats($filters);
+    }
 }

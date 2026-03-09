@@ -1,18 +1,16 @@
 @extends('layouts.app')
-@section('title', 'Báo cáo tháng ' . $month . '/' . $year)
-@section('breadcrumb', 'Báo cáo / Tháng ' . $month . '/' . $year)
+@section('title', 'Báo cáo Doanh số')
+@section('breadcrumb', 'Báo cáo / Doanh số')
 
 @push('styles')
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <style>
-.report-table th, .report-table td { font-size: .78rem; padding: .4rem .6rem; white-space: nowrap; }
+.report-table th, .report-table td { font-size: .8rem; padding: .45rem .6rem; }
 .report-table .col-money { text-align: right; font-family: 'Courier New', monospace; }
-.input-inline { width: 120px; font-size: .78rem; text-align: right; }
-.input-refund  { width: 100px; font-size: .78rem; text-align: right; }
-.profit-pos  { color: #059669; font-weight: 700; }
-.profit-neg  { color: #dc2626; font-weight: 700; }
-.row-today   { background: #fffbeb !important; }
-.row-zero    { opacity: .55; }
-.saving-indicator { font-size: .7rem; color: #6b7280; }
+.profit-pos { color: #059669; font-weight: 700; }
+.profit-neg { color: #dc2626; font-weight: 700; }
+.flatpickr-input[readonly] { background: #fff; }
 </style>
 @endpush
 
@@ -20,10 +18,17 @@
 {{-- Header + filters --}}
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
     <div>
-        <h5 class="mb-0 fw-bold">Báo cáo Tháng {{ $month }}/{{ $year }}</h5>
-        <small class="text-muted">{{ $shops->firstWhere('id', $shopId)?->name ?? 'Tất cả shop' }}</small>
+        <h5 class="mb-0 fw-bold">Báo cáo Doanh số</h5>
+        <small class="text-muted">
+            {{ $shops->firstWhere('id', $shopId)?->name ?? '—' }}
+            &nbsp;·&nbsp;
+            {{ \Carbon\Carbon::parse($dateFrom)->format('d/m/Y') }} → {{ \Carbon\Carbon::parse($dateTo)->format('d/m/Y') }}
+            @if(count($productIds) > 0)
+                &nbsp;·&nbsp; {{ count($productIds) }} sản phẩm được chọn
+            @endif
+        </small>
     </div>
-    <form method="GET" class="d-flex gap-2 align-items-end flex-wrap">
+    <form method="GET" class="d-flex gap-2 align-items-end flex-wrap" id="reportFilterForm">
         <div>
             <label class="form-label mb-1 fw-semibold" style="font-size:.75rem">Shop</label>
             <select name="shop_id" class="form-select form-select-sm" style="width:180px" onchange="this.form.submit()">
@@ -33,361 +38,222 @@
             </select>
         </div>
         <div>
-            <label class="form-label mb-1 fw-semibold" style="font-size:.75rem">Tháng</label>
-            <select name="month" class="form-select form-select-sm" style="width:80px" onchange="this.form.submit()">
-                @for($m = 1; $m <= 12; $m++)
-                    <option value="{{ $m }}" {{ $m == $month ? 'selected' : '' }}>T{{ $m }}</option>
-                @endfor
-            </select>
+            <label class="form-label mb-1 fw-semibold" style="font-size:.75rem">Từ ngày</label>
+            <input type="text" name="date_from" id="dateFrom" class="form-control form-control-sm"
+                   value="{{ $dateFrom }}" style="width:130px" placeholder="dd/mm/yyyy" readonly>
         </div>
         <div>
-            <label class="form-label mb-1 fw-semibold" style="font-size:.75rem">Năm</label>
-            <select name="year" class="form-select form-select-sm" style="width:90px" onchange="this.form.submit()">
-                @foreach(range(now()->year, 2024) as $y)
-                    <option value="{{ $y }}" {{ $y == $year ? 'selected' : '' }}>{{ $y }}</option>
+            <label class="form-label mb-1 fw-semibold" style="font-size:.75rem">Đến ngày</label>
+            <input type="text" name="date_to" id="dateTo" class="form-control form-control-sm"
+                   value="{{ $dateTo }}" style="width:130px" placeholder="dd/mm/yyyy" readonly>
+        </div>
+        @if($products->isNotEmpty())
+        <div>
+            <label class="form-label mb-1 fw-semibold" style="font-size:.75rem">Sản phẩm</label>
+            <select name="product_ids[]" id="productSelect" class="form-select form-select-sm" multiple
+                    style="min-width:220px">
+                @foreach($products as $p)
+                    <option value="{{ $p->id }}" {{ in_array($p->id, $productIds) ? 'selected' : '' }}>
+                        {{ $p->name }}
+                    </option>
                 @endforeach
             </select>
         </div>
-        <input type="hidden" name="shop_id" value="{{ $shopId }}">
+        @endif
+        <button type="submit" class="btn btn-sm btn-primary align-self-end">
+            <i class="bi bi-search"></i> Xem
+        </button>
+        @if(request()->hasAny(['date_from', 'date_to', 'product_ids']))
+            <a href="{{ route('reports.monthly', ['shop_id' => $shopId]) }}"
+               class="btn btn-sm btn-outline-secondary align-self-end">
+                <i class="bi bi-x"></i>
+            </a>
+        @endif
     </form>
 </div>
 
-{{-- Monthly summary stats --}}
-@php
-    $totalProfitBeforeAds = collect($report['days'])->sum('profit_before_ads');
-    $totalAdsCost         = collect($report['days'])->sum('ads_cost');
-    $totalDailyProfit     = $report['total_daily_profit'];
-    $monthlyProfit        = $report['monthly_profit'];
-    $kolCost              = $report['kol_cost'];
-
-    // Helper tính % thay đổi và trả về HTML badge
-    $cmpBadge = function(?float $curr, ?float $prev, int $prevM, int $prevY): string {
-        $label = "T{$prevM}/{$prevY}";
-        if ($prev === null || $prev == 0) {
-            return "<span class=\"flat\">— so với {$label}</span>";
-        }
-        $pct = round(($curr - $prev) / abs($prev) * 100, 1);
-        if ($pct > 0) {
-            return "<span class=\"up\">▲" . number_format($pct, 1) . "%</span><span class=\"flat\"> so với {$label}</span>";
-        }
-        if ($pct < 0) {
-            return "<span class=\"down\">▼" . number_format(abs($pct), 1) . "%</span><span class=\"flat\"> so với {$label}</span>";
-        }
-        return "<span class=\"flat\">= 0% so với {$label}</span>";
-    };
-@endphp
+{{-- Summary cards --}}
 <div class="row g-2 mb-3">
     <div class="col-auto">
         <div class="stat-card" style="background:#3b82f6">
             <div class="label">Doanh số</div>
-            <div class="value">{{ number_format($currStats['total_selling']) }}₫</div>
-            <div class="compare">{!! $cmpBadge($currStats['total_selling'], $prevStats['total_selling'], $prevMonth, $prevYear) !!}</div>
+            <div class="value">{{ number_format($report['total_revenue']) }}₫</div>
         </div>
     </div>
     <div class="col-auto">
         <div class="stat-card" style="background:#7c3aed">
-            <div class="label">Vốn</div>
-            <div class="value">{{ number_format($currStats['total_cost']) }}₫</div>
-            <div class="compare">{!! $cmpBadge($currStats['total_cost'], $prevStats['total_cost'], $prevMonth, $prevYear) !!}</div>
+            <div class="label">Giá vốn</div>
+            <div class="value">{{ number_format($report['total_cost']) }}₫</div>
+        </div>
+    </div>
+    <div class="col-auto">
+        <div class="stat-card" style="background:{{ $report['total_profit'] >= 0 ? '#059669' : '#dc2626' }}">
+            <div class="label">Lợi nhuận *</div>
+            <div class="value">{{ number_format($report['total_profit']) }}₫</div>
         </div>
     </div>
     <div class="col-auto">
         <div class="stat-card" style="background:#f59e0b">
-            <div class="label">ADS</div>
-            <div class="value">{{ number_format($totalAdsCost) }}₫</div>
-            <div class="compare">{!! $cmpBadge($currStats['total_ads_cost'], $prevStats['total_ads_cost'], $prevMonth, $prevYear) !!}</div>
-        </div>
-    </div>
-    <div class="col-auto">
-        <div class="stat-card" style="background:#ef4444">
-            <div class="label">KOL</div>
-            <div class="value">{{ number_format($kolCost) }}₫</div>
-            <div class="compare">{!! $cmpBadge($currStats['kol_cost'], $prevStats['kol_cost'], $prevMonth, $prevYear) !!}</div>
-        </div>
-    </div>
-    <div class="col-auto">
-        <div class="stat-card" style="background:{{ $monthlyProfit >= 0 ? '#059669' : '#dc2626' }}">
-            <div class="label">Lợi Nhuận</div>
-            <div class="value">{{ number_format($monthlyProfit) }}₫</div>
-            <div class="compare">{!! $cmpBadge($currStats['monthly_profit'], $prevStats['monthly_profit'], $prevMonth, $prevYear) !!}</div>
+            <div class="label">Số lượng</div>
+            <div class="value">{{ number_format($report['total_qty']) }}</div>
         </div>
     </div>
 </div>
+<small class="text-muted d-block mb-3" style="font-size:.72rem">
+    * Lợi nhuận = Doanh số − Thuế 1.5% − Giá vốn (chưa trừ phí vận hành đơn hàng, ADS, KOL)
+</small>
 
 {{-- Chart --}}
-@php
-    $chartDays    = collect($report['days'])->pluck('date')->toArray();
-    $chartProfit  = collect($report['days'])->pluck('profit_before_ads')->toArray();
-    $chartAds     = collect($report['days'])->pluck('ads_cost')->toArray();
-    $chartNetProfit = collect($report['days'])->pluck('daily_profit')->toArray();
-@endphp
+@if($report['products']->isNotEmpty())
 <div class="card mb-3">
-    <div class="card-header d-flex align-items-center justify-content-between">
-        <span class="fw-semibold" style="font-size:.85rem">
-            <i class="bi bi-bar-chart-line me-1 text-primary"></i>Biểu đồ lợi nhuận theo ngày
+    <div class="card-header fw-semibold d-flex align-items-center justify-content-between">
+        <span style="font-size:.85rem">
+            <i class="bi bi-bar-chart-line me-1 text-primary"></i>Biểu đồ theo sản phẩm
         </span>
         <div class="btn-group btn-group-sm" id="chartTypeToggle">
-            <button class="btn btn-outline-secondary active" data-type="bar">Cột</button>
-            <button class="btn btn-outline-secondary" data-type="line">Đường</button>
+            <button class="btn btn-outline-secondary active" data-type="revenue">Doanh số</button>
+            <button class="btn btn-outline-secondary" data-type="profit">Lợi nhuận</button>
         </div>
     </div>
-    <div class="card-body" style="height:260px; padding:.75rem">
-        <canvas id="monthlyChart"></canvas>
+    <div class="card-body" style="height:{{ min(60 + $report['products']->count() * 28, 360) }}px; padding:.75rem">
+        <canvas id="productChart"></canvas>
     </div>
 </div>
+@endif
 
-{{-- KOL Cost form --}}
-<div class="card mb-3">
-    <div class="card-body py-2 d-flex align-items-center gap-3 flex-wrap">
-        <span class="fw-semibold" style="font-size:.85rem">
-            <i class="bi bi-star me-1 text-warning"></i>Chi phí KOL Tháng {{ $month }}/{{ $year }}:
-        </span>
-        <form action="{{ route('reports.monthly-kol.update') }}" method="POST"
-              class="d-flex align-items-center gap-2" id="kolForm">
-            @csrf
-            <input type="hidden" name="shop_id" value="{{ $shopId }}">
-            <input type="hidden" name="year" value="{{ $year }}">
-            <input type="hidden" name="month" value="{{ $month }}">
-            <input type="number" name="kol_cost" id="kolCostInput"
-                   class="form-control form-control-sm" style="width:160px"
-                   value="{{ $kolCost }}" min="0" placeholder="0">
-            <button type="submit" class="btn btn-sm btn-warning">
-                <i class="bi bi-check-lg"></i> Lưu KOL
-            </button>
-            <span class="saving-indicator" id="kolSaved"></span>
-        </form>
-    </div>
-</div>
-
-{{-- Daily table --}}
+{{-- Product table --}}
 <div class="card">
-    <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
-        <span>Chi tiết theo ngày</span>
-        <small class="text-muted">ADS nhập theo định dạng ₫324.431 hoặc số thuần (tự nhân 1.08)</small>
+    <div class="card-header fw-semibold" style="font-size:.85rem">
+        Chi tiết theo sản phẩm
+        <span class="badge bg-secondary ms-1">{{ $report['products']->count() }}</span>
     </div>
     <div class="table-responsive">
-        <table class="table report-table mb-0">
+        <table class="table report-table mb-0 table-hover">
             <thead>
                 <tr>
-                    <th>Ngày</th>
-                    <th class="col-money">LN trước ADS</th>
-                    <th></th>
-                    <th style="min-width:130px">ADS (Nhập tay)</th>
-                    <th style="min-width:100px">Hoàn ADS</th>
-                    <th class="col-money">Chi phí ADS</th>
-                    <th class="col-money">Lợi nhuận</th>
-                    <th></th>
+                    <th>Sản phẩm</th>
+                    <th class="col-money">Số lượng</th>
+                    <th class="col-money">Doanh số</th>
+                    <th class="col-money">Giá vốn</th>
+                    <th class="col-money">Lợi nhuận *</th>
+                    <th class="col-money">% LN/DS</th>
                 </tr>
             </thead>
             <tbody>
-                @php $today = now()->format('Y-m-d'); @endphp
-                @foreach($report['days'] as $day)
+                @forelse($report['products'] as $p)
                 @php
-                    $isToday   = $day['date'] === $today;
-                    $isZero    = $day['profit_before_ads'] == 0;
-                    $rowClass  = $isToday ? 'row-today' : ($isZero ? 'row-zero' : '');
-                    $profit    = $day['daily_profit'];
+                    $pct = $p->total_revenue > 0
+                        ? round($p->total_profit / $p->total_revenue * 100, 1)
+                        : 0;
                 @endphp
-                <tr class="{{ $rowClass }}" data-date="{{ $day['date'] }}">
-                    <td>
-                        <span class="fw-semibold">{{ \Carbon\Carbon::parse($day['date'])->format('d/m') }}</span>
-                        @if($isToday) <span class="badge bg-warning-subtle text-warning" style="font-size:.65rem">Hôm nay</span> @endif
-                    </td>
-                    <td class="col-money">
-                        <span class="{{ $day['profit_before_ads'] >= 0 ? 'profit-pos' : 'profit-neg' }}">
-                            {{ number_format($day['profit_before_ads']) }}
-                        </span>
-                    </td>
-                    <td class="text-muted" style="font-size:.75rem; color:#94a3b8 !important">→</td>
-                    {{-- ADS input --}}
-                    <td>
-                        <input type="text"
-                               class="form-control form-control-sm input-inline ads-input"
-                               data-date="{{ $day['date'] }}"
-                               value="{{ $day['ads_raw_input'] ?? '' }}"
-                               placeholder="₫0">
-                    </td>
-                    {{-- Hoàn ADS --}}
-                    <td>
-                        <input type="number"
-                               class="form-control form-control-sm input-refund refund-input"
-                               data-date="{{ $day['date'] }}"
-                               value="{{ $day['ads_refund'] > 0 ? $day['ads_refund'] : '' }}"
-                               placeholder="0" min="0">
-                    </td>
-                    {{-- Chi phí ADS --}}
-                    <td class="col-money ads-cost-cell" id="ads-cost-{{ str_replace('-', '', $day['date']) }}">
-                        {{ number_format($day['ads_cost']) }}
-                    </td>
-                    {{-- Lợi nhuận ngày --}}
-                    <td class="col-money profit-cell" id="profit-{{ str_replace('-', '', $day['date']) }}">
-                        <span class="{{ $profit >= 0 ? 'profit-pos' : 'profit-neg' }}">
-                            {{ number_format($profit) }}
-                        </span>
-                    </td>
-                    <td>
-                        <span class="saving-indicator" id="saved-{{ str_replace('-', '', $day['date']) }}"></span>
-                    </td>
-                </tr>
-                @endforeach
-            </tbody>
-            <tfoot class="table-light">
                 <tr>
-                    <th>Tổng tháng</th>
-                    <th class="col-money profit-pos">{{ number_format($totalProfitBeforeAds) }}</th>
-                    <th></th>
-                    <th></th>
-                    <th></th>
-                    <th class="col-money text-warning fw-bold">{{ number_format($totalAdsCost) }}</th>
-                    <th class="col-money {{ $totalDailyProfit >= 0 ? 'profit-pos' : 'profit-neg' }}">
-                        {{ number_format($totalDailyProfit) }}
-                    </th>
-                    <th></th>
+                    <td class="fw-semibold">{{ $p->product_name }}</td>
+                    <td class="col-money">{{ number_format($p->total_qty) }}</td>
+                    <td class="col-money">{{ number_format($p->total_revenue) }}₫</td>
+                    <td class="col-money">{{ number_format($p->total_cost) }}₫</td>
+                    <td class="col-money {{ $p->total_profit >= 0 ? 'profit-pos' : 'profit-neg' }}">
+                        {{ number_format($p->total_profit) }}₫
+                    </td>
+                    <td class="col-money {{ $pct >= 0 ? 'text-success' : 'text-danger' }}">
+                        {{ $pct }}%
+                    </td>
                 </tr>
-                <tr class="table-success">
-                    <th colspan="6" class="text-end">Lợi nhuận tháng (sau KOL {{ number_format($kolCost) }}₫):</th>
-                    <th class="col-money {{ $monthlyProfit >= 0 ? 'profit-pos' : 'profit-neg' }}" id="monthlyProfitCell">
-                        {{ number_format($monthlyProfit) }}
+                @empty
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-5">
+                        <i class="bi bi-inbox fs-2 d-block mb-2 opacity-25"></i>
+                        Không có dữ liệu trong khoảng thời gian này.
+                    </td>
+                </tr>
+                @endforelse
+            </tbody>
+            @if($report['products']->isNotEmpty())
+            <tfoot class="table-light">
+                @php
+                    $totalPct = $report['total_revenue'] > 0
+                        ? round($report['total_profit'] / $report['total_revenue'] * 100, 1)
+                        : 0;
+                @endphp
+                <tr>
+                    <th>Tổng</th>
+                    <th class="col-money">{{ number_format($report['total_qty']) }}</th>
+                    <th class="col-money">{{ number_format($report['total_revenue']) }}₫</th>
+                    <th class="col-money">{{ number_format($report['total_cost']) }}₫</th>
+                    <th class="col-money {{ $report['total_profit'] >= 0 ? 'profit-pos' : 'profit-neg' }}">
+                        {{ number_format($report['total_profit']) }}₫
                     </th>
-                    <th></th>
+                    <th class="col-money {{ $totalPct >= 0 ? 'text-success' : 'text-danger' }}">
+                        {{ $totalPct }}%
+                    </th>
                 </tr>
             </tfoot>
+            @endif
         </table>
     </div>
 </div>
 @endsection
 
 @push('scripts')
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/vn.js"></script>
+<script>
+const fpOpts = { dateFormat: 'Y-m-d', altInput: true, altFormat: 'd/m/Y', allowInput: true, locale: 'vn' };
+flatpickr('#dateFrom', fpOpts);
+flatpickr('#dateTo',   fpOpts);
+
+@if($products->isNotEmpty())
+new TomSelect('#productSelect', {
+    plugins       : { remove_button: {} },
+    placeholder   : 'Tất cả sản phẩm (để trống = lấy hết)...',
+    maxOptions    : null,
+    dropdownParent: 'body',
+    render: {
+        no_results: () => '<div class="px-3 py-2 text-muted" style="font-size:.78rem">Không tìm thấy</div>',
+    },
+});
+@endif
+</script>
+@if($report['products']->isNotEmpty())
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
-const CSRF   = document.querySelector('meta[name="csrf-token"]').content;
-const shopId = {{ $shopId }};
-let saveTimer = {};
+const productLabels  = @json($report['products']->pluck('product_name'));
+const dataRevenue    = @json($report['products']->pluck('total_revenue'));
+const dataCost       = @json($report['products']->pluck('total_cost'));
+const dataProfit     = @json($report['products']->pluck('total_profit'));
 
-// ─── Parse ADS input (₫324.431 → 324431 * 1.08) ───────────────────────────
-function parseAdsInput(raw) {
-    if (!raw || raw.trim() === '') return 0;
-    let cleaned = raw.replace(/[₫\s]/g, '');   // bỏ ký hiệu ₫
-    cleaned = cleaned.replace(/\./g, '');        // dấu chấm = phân cách ngàn
-    cleaned = cleaned.replace(/,/g, '.');        // phẩy = thập phân
-    const val = parseFloat(cleaned) || 0;
-    return Math.round(val * 1.08);
+const ctx = document.getElementById('productChart').getContext('2d');
+
+function buildDatasets(type) {
+    if (type === 'profit') {
+        return [{
+            label: 'Lợi nhuận',
+            data: dataProfit,
+            backgroundColor: dataProfit.map(v => v >= 0 ? 'rgba(16,185,129,.75)' : 'rgba(220,38,38,.65)'),
+            borderRadius: 3,
+        }];
+    }
+    return [
+        {
+            label: 'Doanh số',
+            data: dataRevenue,
+            backgroundColor: 'rgba(99,102,241,.7)',
+            borderRadius: 3,
+        },
+        {
+            label: 'Giá vốn',
+            data: dataCost,
+            backgroundColor: 'rgba(124,58,237,.55)',
+            borderRadius: 3,
+        },
+    ];
 }
 
-// ─── Save daily ADS via AJAX ───────────────────────────────────────────────
-function saveDailyAds(date, adsRaw, adsRefund) {
-    const key = date.replace(/-/g, '');
-    const savedEl = document.getElementById('saved-' + key);
-    if (savedEl) savedEl.textContent = 'Đang lưu...';
-
-    fetch('{{ route("reports.daily-ads.update") }}', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' },
-        body: JSON.stringify({ shop_id: shopId, date, ads_raw_input: adsRaw, ads_refund: parseFloat(adsRefund) || 0 })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.success) {
-            // Cập nhật chi phí ADS
-            const adsCostEl = document.getElementById('ads-cost-' + key);
-            const profitEl  = document.getElementById('profit-' + key);
-            if (adsCostEl) adsCostEl.textContent = formatVND(data.ads_cost);
-
-            // Tính lại profit_before_ads cho dòng này (lấy từ DOM)
-            const row = document.querySelector(`tr[data-date="${date}"]`);
-            if (row && profitEl) {
-                const pbaText = row.querySelector('.profit-pos, .profit-neg');
-                // Không cần recalculate vì profit_before_ads không đổi
-                // profit = profit_before_ads (từ server) - ads_cost mới
-                // Ta cần reload hoặc server trả về
-            }
-            if (savedEl) { savedEl.textContent = '✓ Đã lưu'; setTimeout(() => savedEl.textContent = '', 2000); }
-        }
-    })
-    .catch(() => { if (savedEl) savedEl.textContent = '✗ Lỗi'; });
-}
-
-// ─── Debounced save on input ───────────────────────────────────────────────
-document.querySelectorAll('.ads-input, .refund-input').forEach(function (input) {
-    input.addEventListener('input', function () {
-        const date    = this.dataset.date;
-        const row     = document.querySelector(`tr[data-date="${date}"]`);
-        const adsRaw  = row.querySelector('.ads-input').value;
-        const refund  = row.querySelector('.refund-input').value;
-
-        // Live preview chi phí ADS
-        const adsFee    = parseAdsInput(adsRaw);
-        const adsRefund = parseFloat(refund) || 0;
-        const adsCost   = Math.max(0, adsFee - adsRefund);
-        const key = date.replace(/-/g, '');
-        const adsCostEl = document.getElementById('ads-cost-' + key);
-        if (adsCostEl) adsCostEl.textContent = formatVND(adsCost);
-
-        // Debounce save 800ms
-        clearTimeout(saveTimer[date]);
-        saveTimer[date] = setTimeout(() => saveDailyAds(date, adsRaw, refund), 800);
-    });
-});
-
-// ─── KOL form AJAX ────────────────────────────────────────────────────────
-document.getElementById('kolForm').addEventListener('submit', function (e) {
-    e.preventDefault();
-    const fd = new FormData(this);
-    fetch(this.action, {
-        method: 'POST',
-        headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' },
-        body: fd
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.success) {
-            document.getElementById('kolSaved').textContent = '✓ Đã lưu';
-            setTimeout(() => document.getElementById('kolSaved').textContent = '', 2000);
-            // Reload để cập nhật monthly profit
-            setTimeout(() => location.reload(), 500);
-        }
-    });
-});
-
-// ─── Chart.js biểu đồ lợi nhuận theo ngày ────────────────────────────────
-const labels      = @json($chartDays);
-const dataProfit  = @json($chartProfit);
-const dataAds     = @json($chartAds);
-const dataNet     = @json($chartNetProfit);
-
-const ctx = document.getElementById('monthlyChart').getContext('2d');
 let chart = new Chart(ctx, {
     type: 'bar',
-    data: {
-        labels,
-        datasets: [
-            {
-                label: 'LN trước ADS',
-                data: dataProfit,
-                backgroundColor: 'rgba(99,102,241,.65)',
-                borderColor: '#6366f1',
-                borderWidth: 1,
-                borderRadius: 3,
-            },
-            {
-                label: 'Chi phí ADS',
-                data: dataAds,
-                backgroundColor: 'rgba(245,158,11,.55)',
-                borderColor: '#f59e0b',
-                borderWidth: 1,
-                borderRadius: 3,
-            },
-            {
-                label: 'LN sau ADS',
-                data: dataNet,
-                backgroundColor: 'rgba(16,185,129,.65)',
-                borderColor: '#10b981',
-                borderWidth: 1,
-                borderRadius: 3,
-            },
-        ]
-    },
+    data: { labels: productLabels, datasets: buildDatasets('revenue') },
     options: {
+        indexAxis: 'y',
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
@@ -399,27 +265,26 @@ let chart = new Chart(ctx, {
             }
         },
         scales: {
-            y: {
+            x: {
                 ticks: {
                     font: { size: 10 },
-                    callback: v => (v / 1000).toLocaleString('vi-VN') + 'K'
+                    callback: v => (v / 1_000_000).toLocaleString('vi-VN') + 'M'
                 },
                 grid: { color: 'rgba(0,0,0,.05)' }
             },
-            x: { ticks: { font: { size: 10 }, maxRotation: 45 } }
+            y: { ticks: { font: { size: 10 } } }
         }
     }
 });
 
-// Toggle bar / line
 document.getElementById('chartTypeToggle').addEventListener('click', function (e) {
     const btn = e.target.closest('button[data-type]');
     if (!btn) return;
     this.querySelectorAll('button').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    chart.config.type = btn.dataset.type;
+    chart.data.datasets = buildDatasets(btn.dataset.type);
     chart.update();
 });
 </script>
+@endif
 @endpush
-

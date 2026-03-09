@@ -26,6 +26,12 @@ Route::middleware('auth')->group(function () {
     // Quản lý Shop
     Route::resource('shops', ShopController::class)->except(['show']);
 
+    // Danh sách sản phẩm tổng hợp (tất cả shop, có filter + kéo thả)
+    Route::get('/products',                                        [ProductController::class, 'all'])->name('products.all');
+    Route::post('/products/reorder',                               [ProductController::class, 'reorder'])->name('products.reorder');
+    Route::get('/products/{id}/histories',                         [ProductController::class, 'histories'])->name('products.histories');
+    Route::delete('/products/{id}/histories/{historyId}',          [ProductController::class, 'destroyHistory'])->name('products.histories.destroy');
+
     // Quản lý Sản phẩm (nested trong Shop)
     Route::prefix('shops/{shopId}/products')->name('shops.products.')->group(function () {
         Route::get('/',                                        [ProductController::class, 'index'])->name('index');
@@ -34,6 +40,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/{id}/edit',                               [ProductController::class, 'edit'])->name('edit');
         Route::put('/{id}',                                    [ProductController::class, 'update'])->name('update');
         Route::delete('/{id}',                                 [ProductController::class, 'destroy'])->name('destroy');
+        Route::delete('/{id}/current-version',                 [ProductController::class, 'destroyCurrentVersion'])->name('current-version.destroy');
         Route::delete('/{productId}/variants/{variantId}',     [ProductController::class, 'destroyVariant'])->name('variants.destroy');
     });
 
@@ -50,6 +57,9 @@ Route::middleware('auth')->group(function () {
     // Báo cáo
     Route::prefix('reports')->name('reports.')->group(function () {
         Route::get('/monthly',       [ReportController::class, 'monthly'])->name('monthly');
+        Route::get('/ads',           [ReportController::class, 'adsEntry'])->name('ads');
+        Route::get('/compare',       [ReportController::class, 'compare'])->name('compare');
+        Route::get('/compare-stats', [ReportController::class, 'compareStats'])->name('compare-stats');
         Route::post('/daily-ads',    [ReportController::class, 'updateDailyAds'])->name('daily-ads.update');
         Route::post('/monthly-kol',  [ReportController::class, 'updateMonthlyKol'])->name('monthly-kol.update');
     });
