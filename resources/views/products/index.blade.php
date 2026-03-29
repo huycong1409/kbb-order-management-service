@@ -44,10 +44,23 @@
 </div>
 
 <div class="card">
+    {{-- Drag-drop chỉ hiện khi không có search/filter để tránh nhầm lẫn thứ tự --}}
+    @php $isDragEnabled = !request()->hasAny(['search', 'is_active']); @endphp
+    @if($isDragEnabled)
+    <div class="px-3 pt-2 pb-1">
+        <small class="text-muted">
+            <i class="bi bi-grip-vertical"></i> Kéo thả hàng để thay đổi thứ tự hiển thị.
+            <span id="sortSaving" class="text-primary d-none ms-2"><i class="bi bi-arrow-repeat spin"></i> Đang lưu...</span>
+            <span id="sortSaved" class="text-success d-none ms-2"><i class="bi bi-check-lg"></i> Đã lưu</span>
+        </small>
+    </div>
+    @endif
+
     <div class="table-responsive">
         <table class="table table-hover mb-0">
             <thead>
                 <tr>
+                    @if($isDragEnabled)<th style="width:32px"></th>@endif
                     <th>#</th>
                     <th>Tên Sản phẩm</th>
                     <th>SKU</th>
@@ -57,9 +70,14 @@
                     <th class="text-end">Thao tác</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="productTableBody">
                 @forelse($products as $product)
-                <tr>
+                <tr data-id="{{ $product->id }}">
+                    @if($isDragEnabled)
+                    <td class="drag-handle text-muted" style="cursor:grab; width:32px; vertical-align:middle">
+                        <i class="bi bi-grip-vertical"></i>
+                    </td>
+                    @endif
                     <td class="text-muted">{{ $product->id }}</td>
                     <td>
                         <div class="fw-semibold">{{ $product->name }}</div>
@@ -94,6 +112,10 @@
                     </td>
                     <td class="text-end">
                         <div class="d-flex gap-1 justify-content-end">
+                            <a href="{{ route('products.histories', $product->id) }}"
+                               class="btn btn-sm btn-outline-secondary" title="Lịch sử phiên bản">
+                                <i class="bi bi-clock-history"></i>
+                            </a>
                             <a href="{{ route('shops.products.edit', [$shop->id, $product->id]) }}"
                                class="btn btn-sm btn-outline-primary">
                                 <i class="bi bi-pencil"></i> Sửa
@@ -111,7 +133,7 @@
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="7" class="text-center text-muted py-5">
+                    <td colspan="{{ $isDragEnabled ? 8 : 7 }}" class="text-center text-muted py-5">
                         <i class="bi bi-box-seam fs-2 d-block mb-2 opacity-25"></i>
                         Chưa có sản phẩm nào.
                         <a href="{{ route('shops.products.create', $shop->id) }}">Thêm sản phẩm đầu tiên</a>
@@ -128,3 +150,61 @@
     @endif
 </div>
 @endsection
+
+@push('scripts')
+@if($isDragEnabled)
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+<script>
+(function () {
+    const tbody     = document.getElementById('productTableBody');
+    const saving    = document.getElementById('sortSaving');
+    const saved     = document.getElementById('sortSaved');
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+    const page      = {{ $products->currentPage() }};
+    const perPage   = {{ $products->perPage() }};
+    let saveTimer   = null;
+
+    Sortable.create(tbody, {
+        handle: '.drag-handle',
+        animation: 150,
+        ghostClass: 'table-active',
+        onEnd: function () {
+            clearTimeout(saveTimer);
+            saving.classList.remove('d-none');
+            saved.classList.add('d-none');
+
+            saveTimer = setTimeout(async function () {
+                const ids = Array.from(tbody.querySelectorAll('tr[data-id]'))
+                    .map(tr => parseInt(tr.dataset.id));
+
+                try {
+                    const resp = await fetch('{{ route("products.reorder") }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken,
+                        },
+                        body: JSON.stringify({ ids, page, per_page: perPage }),
+                    });
+
+                    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+                    saving.classList.add('d-none');
+                    saved.classList.remove('d-none');
+                    setTimeout(() => saved.classList.add('d-none'), 2000);
+                } catch (e) {
+                    saving.classList.add('d-none');
+                    alert('Lưu thứ tự thất bại. Vui lòng thử lại.');
+                }
+            }, 400);
+        },
+    });
+})();
+</script>
+<style>
+.spin { animation: spin .6s linear infinite; display:inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+tr[data-id]:hover .drag-handle { color: #6c757d !important; }
+</style>
+@endif
+@endpush

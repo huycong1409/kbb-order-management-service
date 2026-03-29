@@ -29,4 +29,10 @@ interface OrderRepositoryInterface
      * Trả về: ['2026-03-09' => ['profit' => 1200000, 'shop_ids' => [1, 2]], ...]
      */
     public function getDailyStats(array $filters): array;
+
+    /**
+     * Lợi nhuận theo từng ngày trong tháng — 1 SQL query thay vì gọi từng ngày.
+     * Trả về: ['2026-03-01' => 1234567.0, '2026-03-02' => 890000.0, ...]
+     */
+    public function getProfitByDateGrouped(int $shopId, int $year, int $month): array;
 }

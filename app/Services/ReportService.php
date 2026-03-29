@@ -28,14 +28,16 @@ class ReportService
         $dailyReports = $this->reportRepository->getDailyReportsForMonth($shopId, $year, $month);
         $kolCost      = $this->reportRepository->getMonthlyKolCost($shopId, $year, $month);
 
-        // Lấy lợi nhuận đơn hàng theo từng ngày
+        // Lấy lợi nhuận tất cả ngày trong tháng bằng 1 SQL query
+        $profitByDate = $this->orderRepository->getProfitByDateGrouped($shopId, $year, $month);
+
         $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
         $days        = [];
 
         for ($day = 1; $day <= $daysInMonth; $day++) {
             $date          = sprintf('%04d-%02d-%02d', $year, $month, $day);
             $dailyReport   = $dailyReports->firstWhere('report_date', $date);
-            $profitBeforeAds = $this->orderRepository->getProfitByDate($shopId, $date);
+            $profitBeforeAds = $profitByDate[$date] ?? 0.0;
 
             $adsFee    = $dailyReport?->ads_fee ?? 0;
             $adsRefund = $dailyReport?->ads_refund ?? 0;

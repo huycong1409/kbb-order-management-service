@@ -257,77 +257,152 @@ class OrderRepository implements OrderRepositoryInterface
 
     /**
      * Trả về tóm tắt tháng: số đơn, doanh thu, lợi nhuận trước ADS.
+     * Dùng SQL thay vì load toàn bộ orders vào PHP.
      */
     public function getMonthSummaryStats(int $shopId, int $year, int $month): array
     {
-        $orders = Order::with(['items.productVariant', 'items.product', 'items.order'])
-            ->forShop($shopId)
-            ->whereYear('order_date', $year)
-            ->whereMonth('order_date', $month)
-            ->get();
+        $itemSub = DB::table('order_items')
+            ->select(
+                'order_id',
+                DB::raw('SUM(selling_price)         AS selling_total'),
+                DB::raw('SUM(selling_price * 0.015) AS tax_total'),
+                DB::raw('SUM(quantity * cost_price)  AS cost_total')
+            )
+            ->groupBy('order_id');
+
+        $row = DB::table('orders AS o')
+            ->joinSub($itemSub, 'oi', 'oi.order_id', '=', 'o.id')
+            ->select(
+                DB::raw('COUNT(DISTINCT o.id)                                                   AS order_count'),
+                DB::raw('SUM(oi.selling_total)                                                  AS total_selling'),
+                DB::raw('SUM(oi.cost_total + oi.tax_total
+                             + o.fixed_fee + o.service_fee + o.payment_fee + o.pi_ship)        AS total_cost'),
+                DB::raw('SUM(oi.selling_total
+                             - (o.fixed_fee + o.service_fee + o.payment_fee + o.pi_ship)
+                             - oi.tax_total - oi.cost_total)                                    AS profit')
+            )
+            ->where('o.shop_id', $shopId)
+            ->whereYear('o.order_date', $year)
+            ->whereMonth('o.order_date', $month)
+            ->first();
 
         return [
-            'order_count'   => $orders->count(),
-            'total_selling' => (float) $orders->flatMap->items->sum('selling_price'),
-            'total_cost'    => (float) $orders->sum(fn ($o) => $o->total_cost),
-            'profit'        => (float) $orders->sum(fn ($o) => $o->profit),
+            'order_count'   => (int)   ($row->order_count   ?? 0),
+            'total_selling' => (float) ($row->total_selling  ?? 0),
+            'total_cost'    => (float) ($row->total_cost     ?? 0),
+            'profit'        => (float) ($row->profit         ?? 0),
         ];
     }
 
     /**
+     * Lợi nhuận theo từng ngày trong tháng — 1 SQL query thay vì gọi getProfitByDate() 28-31 lần.
+     * Trả về: ['2026-03-01' => 1234567.0, ...]
+     */
+    public function getProfitByDateGrouped(int $shopId, int $year, int $month): array
+    {
+        $itemSub = DB::table('order_items')
+            ->select(
+                'order_id',
+                DB::raw('SUM(selling_price)         AS selling_total'),
+                DB::raw('SUM(selling_price * 0.015) AS tax_total'),
+                DB::raw('SUM(quantity * cost_price)  AS cost_total')
+            )
+            ->groupBy('order_id');
+
+        $rows = DB::table('orders AS o')
+            ->joinSub($itemSub, 'oi', 'oi.order_id', '=', 'o.id')
+            ->select(
+                DB::raw('DATE(o.order_date) AS order_day'),
+                DB::raw('SUM(
+                    oi.selling_total
+                    - (o.fixed_fee + o.service_fee + o.payment_fee + o.pi_ship)
+                    - oi.tax_total - oi.cost_total
+                ) AS day_profit')
+            )
+            ->where('o.shop_id', $shopId)
+            ->whereYear('o.order_date', $year)
+            ->whereMonth('o.order_date', $month)
+            ->groupBy(DB::raw('DATE(o.order_date)'))
+            ->get();
+
+        $result = [];
+        foreach ($rows as $row) {
+            $result[$row->order_day] = (float) $row->day_profit;
+        }
+
+        return $result;
+    }
+
+    /**
      * Lợi nhuận (trước ADS) mỗi ngày + shop_ids xuất hiện trong ngày đó.
-     * Áp dụng cùng bộ filter như paginate (không bao gồm sort/pagination).
+     * Dùng raw SQL JOIN + GROUP BY — không load toàn bộ orders vào PHP.
      * Trả về: ['2026-03-09' => ['profit' => 1200000, 'shop_ids' => [1, 2]], ...]
      */
     public function getDailyStats(array $filters): array
     {
-        $query = Order::with(['items.productVariant', 'items.product', 'items.order']);
+        // Subquery: gộp selling/tax/cost theo order
+        $itemSub = DB::table('order_items')
+            ->select(
+                'order_id',
+                DB::raw('SUM(selling_price)         AS selling_total'),
+                DB::raw('SUM(selling_price * 0.015) AS tax_total'),
+                DB::raw('SUM(quantity * cost_price)  AS cost_total')
+            )
+            ->groupBy('order_id');
+
+        $query = DB::table('orders AS o')
+            ->joinSub($itemSub, 'oi', 'oi.order_id', '=', 'o.id')
+            ->select(
+                DB::raw('DATE(o.order_date) AS order_day'),
+                DB::raw('GROUP_CONCAT(DISTINCT o.shop_id ORDER BY o.shop_id) AS shop_ids_str'),
+                DB::raw('SUM(
+                    oi.selling_total
+                    - (o.fixed_fee + o.service_fee + o.payment_fee + o.pi_ship)
+                    - oi.tax_total
+                    - oi.cost_total
+                ) AS day_profit')
+            )
+            ->groupBy(DB::raw('DATE(o.order_date)'));
 
         if (!empty($filters['shop_id'])) {
-            $query->where('shop_id', $filters['shop_id']);
+            $query->where('o.shop_id', $filters['shop_id']);
+        }
+
+        if (!empty($filters['date_from'])) {
+            $query->whereDate('o.order_date', '>=', $filters['date_from']);
+        }
+
+        if (!empty($filters['date_to'])) {
+            $query->whereDate('o.order_date', '<=', $filters['date_to']);
         }
 
         if (!empty($filters['search'])) {
-            $query->where(function ($q) use ($filters) {
-                $q->where('order_code', 'like', "%{$filters['search']}%")
-                  ->orWhereHas('items', function ($q2) use ($filters) {
-                      $q2->where('product_name', 'like', "%{$filters['search']}%")
-                         ->orWhere('product_sku', 'like', "%{$filters['search']}%");
-                  });
+            $s = $filters['search'];
+            $query->where(function ($q) use ($s) {
+                $q->where('o.order_code', 'like', "%{$s}%")
+                  ->orWhereExists(fn ($q2) => $q2->from('order_items')
+                      ->whereColumn('order_items.order_id', 'o.id')
+                      ->where('order_items.product_name', 'like', "%{$s}%"));
             });
         }
 
         if (!empty($filters['product_name'])) {
-            $query->whereHas('items', function ($q) use ($filters) {
-                $q->where('product_name', 'like', "%{$filters['product_name']}%");
-            });
-        }
-
-        if (!empty($filters['date_from'])) {
-            $query->whereDate('order_date', '>=', $filters['date_from']);
-        }
-
-        if (!empty($filters['date_to'])) {
-            $query->whereDate('order_date', '<=', $filters['date_to']);
+            $pn = $filters['product_name'];
+            $query->whereExists(fn ($q) => $q->from('order_items')
+                ->whereColumn('order_items.order_id', 'o.id')
+                ->where('order_items.product_name', 'like', "%{$pn}%"));
         }
 
         if (!empty($filters['loss_only'])) {
-            $query->whereRaw('
-                (SELECT COALESCE(SUM(oi.selling_price),0) FROM order_items oi WHERE oi.order_id = orders.id)
-                - (orders.fixed_fee + orders.service_fee + orders.payment_fee + orders.pi_ship)
-                - (SELECT COALESCE(SUM(oi2.selling_price * 0.015),0) FROM order_items oi2 WHERE oi2.order_id = orders.id)
-                - (SELECT COALESCE(SUM(oi3.quantity * oi3.cost_price),0) FROM order_items oi3 WHERE oi3.order_id = orders.id)
-                < 0
-            ');
+            $query->havingRaw('day_profit < 0');
         }
 
-        $orders = $query->get();
-
         $result = [];
-        foreach ($orders->groupBy(fn ($o) => $o->order_date->format('Y-m-d')) as $day => $group) {
-            $result[$day] = [
-                'profit'   => (float) $group->sum(fn ($o) => $o->profit),
-                'shop_ids' => $group->pluck('shop_id')->unique()->values()->toArray(),
+        foreach ($query->get() as $row) {
+            $shopIds = array_map('intval', explode(',', (string) $row->shop_ids_str));
+            $result[$row->order_day] = [
+                'profit'   => (float) $row->day_profit,
+                'shop_ids' => $shopIds,
             ];
         }
 
